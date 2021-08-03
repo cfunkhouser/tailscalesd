@@ -115,7 +115,7 @@ func (h *rateLimitingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	h.RLock()
 	should := h.earliest.Before(now)
 	if !should {
-		copy(targets, h.last)
+		targets = h.last
 	}
 	h.RUnlock()
 
