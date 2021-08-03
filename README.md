@@ -1,4 +1,4 @@
-# TailscaleSD - Prometheus Tailscale Service Discovery
+# TailscaleSD - Prometheus Service Discovery for Tailscale
 
 Serves Prometheus HTTP Service Discovery for devices on a Tailscale Tailnet.
 
