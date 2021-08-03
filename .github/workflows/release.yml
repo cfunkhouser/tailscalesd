@@ -1,0 +1,29 @@
+name: Publish Binaries on Release
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  release-tailscalesd:
+    name: Release tailscalesd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build tailscalesd
+        run: make all
+      - name: Release tailscalesd
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            tailscalesd-darwin-amd64
+            tailscalesd-linux-amd64
+            tailscalesd-linux-arm6
+            tailscalesd-linux-arm7
+            tailscalesd-linux-386
+            SHA1SUM.txt
+            SHA256SUM.txt
