@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,11 +13,14 @@ import (
 )
 
 var (
-	address string = "0.0.0.0:9242"
-	token   string
-	tailnet string
-
+	address   string = "0.0.0.0:9242"
+	token     string
+	tailnet   string
+	printVer  bool
 	pollLimit time.Duration = time.Minute * 5
+
+	// Version of tailscalesd. Set at build time to something meaningful.
+	Version = "development"
 )
 
 func envVarWithDefault(key, def string) string {
@@ -42,6 +46,7 @@ func defineFlags() {
 	flag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
 	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
 	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
+	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
 }
 
 func main() {
@@ -50,8 +55,16 @@ func main() {
 
 	defineFlags()
 	flag.Parse()
+
+	if printVer {
+		fmt.Printf("tailscalesd version %v\n", Version)
+		return
+	}
+
 	if token == "" || tailnet == "" {
-		log.Fatal("Both --token and --tailnet are required.")
+		fmt.Println("Both -token and -tailnet are required.")
+		flag.Usage()
+		return
 	}
 
 	d := tailscalesd.New(tailnet, token, tailscalesd.WithRateLimit(pollLimit))
