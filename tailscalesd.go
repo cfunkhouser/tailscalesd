@@ -1,28 +1,31 @@
+// Package tailscalesd provides Prometheus Service Discovery for Tailscale.
 package tailscalesd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/cfunkhouser/tailscalesd/tailscale"
+	"github.com/cfunkhouser/tailscalesd/internal/tailscale"
 )
 
+// TargetDescriptor as Prometheus expects it. For more details, see
+// https://prometheus.io/docs/prometheus/latest/http_sd/.
 type TargetDescriptor struct {
 	Targets []string          `json:"targets"`
 	Labels  map[string]string `json:"labels,omitempty"`
 }
 
-type Discoverer struct {
-	ts V2API
-}
-
-type V2API interface {
+// v2API describes subset of the Tailscale API needed for discovering things.
+type v2API interface {
 	Devices(context.Context) ([]tailscale.Device, error)
 }
 
@@ -39,23 +42,24 @@ const (
 	labelMetaDeviceUser          = "__meta_tailscale_device_user"
 )
 
+// filterEmpty removes entries in a map which have either an empty key or empty
+// value.
 func filterEmpty(in map[string]string) map[string]string {
-	r := make(map[string]string)
+	if in == nil {
+		return nil
+	}
+	filtered := make(map[string]string)
 	for k, v := range in {
 		if k == "" || v == "" {
 			continue
 		}
-		r[k] = v
+		filtered[k] = v
 	}
-	return r
+	return filtered
 }
 
-func (d *Discoverer) Discover(ctx context.Context) ([]TargetDescriptor, error) {
-	devices, err := d.ts.Devices(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var found []TargetDescriptor
+// translate Devices to Prometheus TargetDescriptor, filtering empty labels.
+func translate(devices []tailscale.Device) (found []TargetDescriptor) {
 	for _, d := range devices {
 		found = append(found, TargetDescriptor{
 			Targets: d.Addresses,
@@ -73,7 +77,66 @@ func (d *Discoverer) Discover(ctx context.Context) ([]TargetDescriptor, error) {
 			}),
 		})
 	}
-	return found, nil
+	return
+}
+
+type discoverer struct {
+	ts v2API
+}
+
+// DiscoverDevices in a tailnet.
+func (d *discoverer) DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error) {
+	devices, err := d.ts.Devices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return translate(devices), nil
+}
+
+var ErrStaleResults = errors.New("potentially stale results")
+
+type rateLimitingDiscoverer struct {
+	sync.RWMutex
+	discoverer Discoverer
+	freq       time.Duration
+
+	// protected
+	lastDevices []TargetDescriptor
+	earliest    time.Time
+}
+
+func (d *rateLimitingDiscoverer) refreshDevices(ctx context.Context) ([]TargetDescriptor, error) {
+	log.Printf("Refreshing Devices")
+	devices, err := d.discoverer.DiscoverDevices(ctx)
+	if err != nil {
+		return devices, err
+	}
+
+	d.Lock()
+	defer d.Unlock()
+
+	d.lastDevices = devices
+	d.earliest = time.Now().Add(d.freq)
+	log.Printf("Device refresh successful. Next refresh no sooner than %v", d.earliest.Format(time.RFC3339))
+	return devices, nil
+}
+
+func (d *rateLimitingDiscoverer) DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error) {
+	d.RLock()
+	expired := time.Now().After(d.earliest)
+	last := make([]TargetDescriptor, len(d.lastDevices))
+	_ = copy(last, d.lastDevices)
+	d.RUnlock()
+
+	if expired {
+		devices, err := d.refreshDevices(ctx)
+		if err != nil {
+			log.Printf("Failed refreshing: %v", err)
+			return last, ErrStaleResults
+		}
+		return devices, nil
+	}
+	return last, nil
 }
 
 func defaultHTTPClient() *http.Client {
@@ -88,8 +151,24 @@ func defaultHTTPClient() *http.Client {
 	}
 }
 
-func New(tailnet, token string) *Discoverer {
-	return &Discoverer{
+type Option func(Discoverer) Discoverer
+
+func WithRateLimit(freq time.Duration) Option {
+	return func(d Discoverer) Discoverer {
+		return &rateLimitingDiscoverer{
+			discoverer: d,
+			freq:       freq,
+		}
+	}
+}
+
+// Discoverer of things in a tailnet.
+type Discoverer interface {
+	DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error)
+}
+
+func New(tailnet, token string, opts ...Option) Discoverer {
+	var d Discoverer = &discoverer{
 		ts: &tailscale.API{
 			Client:  defaultHTTPClient(),
 			APIBase: tailscale.ProductionAPI,
@@ -97,51 +176,48 @@ func New(tailnet, token string) *Discoverer {
 			Token:   token,
 		},
 	}
-}
-
-type rateLimitingHandler struct {
-	sync.RWMutex
-	d    *Discoverer
-	freq time.Duration
-
-	// protected
-	earliest time.Time
-	last     []TargetDescriptor
-}
-
-func (h *rateLimitingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var targets []TargetDescriptor
-	now := time.Now()
-	h.RLock()
-	should := h.earliest.Before(now)
-	if !should {
-		targets = h.last
+	for _, opt := range opts {
+		d = opt(d)
 	}
-	h.RUnlock()
+	return d
+}
 
-	if should {
-		log.Printf("Fetching devices from Tailscale API")
-		var err error
-		targets, err = h.d.Discover(r.Context())
-		if err != nil {
+// discoveryHandler is a http.Handler that exposes the SD payload. It caches the
+// last valid payload for a fixed period of time to prevent hammering Tailscale's
+// API.
+type discoveryHandler struct {
+	d Discoverer
+}
+
+func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	targets, err := h.d.DiscoverDevices(r.Context())
+	if err != nil {
+		if err != ErrStaleResults {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("Failed to discover Tailscale devices: %v", err)
 			fmt.Fprintf(w, "Failed to discover Tailscale devices: %v", err)
 			return
 		}
-		h.Lock()
-		h.last = targets
-		h.earliest = now.Add(h.freq)
-		h.Unlock()
+		log.Print("Serving potentially stale results")
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(targets); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Failed encoding targets to JSON: %v", err)
+		fmt.Fprintf(w, "Failed encoding targets to JSON: %v", err)
+		return
 	}
 
 	w.Header().Add("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(targets)
+	if _, err := io.Copy(w, &buf); err != nil {
+		// The transaction with the client is already started, so there's nothing
+		// graceful to do here. Log any errors for troubleshooting later.
+		log.Printf("Failed sending JSON payload to the client: %v", err)
+	}
 }
 
-func Export(d *Discoverer, maxFrequency time.Duration) http.Handler {
-	return &rateLimitingHandler{
-		d:    d,
-		freq: maxFrequency,
-	}
+// Export the Discoverer as a http.Handler.
+func Export(d Discoverer, pollFrequency time.Duration) http.Handler {
+	return &discoveryHandler{d}
 }

@@ -1,3 +1,6 @@
+// Package tailscale is a naive, bespoke Tailscale V2 API client. It has only the
+// functionality needed for tailscalesd. You should not rely on its API for
+// anything else.
 package tailscale
 
 import (
@@ -42,7 +45,7 @@ type API struct {
 	Token   string
 }
 
-var ErrUnsuccessfulRequest = errors.New("unsuccessful API call")
+var ErrFailedRequest = errors.New("failed API call")
 
 func (c *API) Devices(ctx context.Context) ([]Device, error) {
 	url := fmt.Sprintf("https://%v@%v/api/v2/tailnet/%v/devices", c.Token, c.APIBase, c.Tailnet)
@@ -55,7 +58,7 @@ func (c *API) Devices(ctx context.Context) ([]Device, error) {
 		return nil, err
 	}
 	if (resp.StatusCode / 100) != 2 {
-		return nil, fmt.Errorf("%w: %v", ErrUnsuccessfulRequest, resp.Status)
+		return nil, fmt.Errorf("%w: %v", ErrFailedRequest, resp.Status)
 	}
 	defer resp.Body.Close()
 	var devices deviceAPIResponse
