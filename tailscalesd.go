@@ -58,12 +58,39 @@ func filterEmpty(in map[string]string) map[string]string {
 	return filtered
 }
 
+type filter func(TargetDescriptor) TargetDescriptor
+
+func filterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
+	var targets []string
+	for _, target := range td.Targets {
+		ip := net.ParseIP(target)
+		if ip == nil {
+			// target is not a valid IP address of any version.
+			continue
+		}
+		if ipv4 := ip.To4(); ipv4 != nil {
+			targets = append(targets, ipv4.String())
+		}
+	}
+	return TargetDescriptor{
+		Targets: targets,
+		Labels:  td.Labels,
+	}
+}
+
+func filterEmptyLabels(td TargetDescriptor) TargetDescriptor {
+	return TargetDescriptor{
+		Targets: td.Targets,
+		Labels:  filterEmpty(td.Labels),
+	}
+}
+
 // translate Devices to Prometheus TargetDescriptor, filtering empty labels.
-func translate(devices []tailscale.Device) (found []TargetDescriptor) {
+func translate(devices []tailscale.Device, filters ...filter) (found []TargetDescriptor) {
 	for _, d := range devices {
-		found = append(found, TargetDescriptor{
+		target := TargetDescriptor{
 			Targets: d.Addresses,
-			Labels: filterEmpty(map[string]string{
+			Labels: map[string]string{
 				labelMetaDeviceAuthorized:    fmt.Sprint(d.Authorized),
 				labelMetaDeviceClientVersion: d.ClientVersion,
 				labelMetaDeviceHostname:      d.Hostname,
@@ -74,8 +101,12 @@ func translate(devices []tailscale.Device) (found []TargetDescriptor) {
 				labelMetaDeviceNodeKey:       d.NodeKey,
 				labelMetaDeviceOS:            d.OS,
 				labelMetaDeviceUser:          d.User,
-			}),
-		})
+			},
+		}
+		for _, filter := range filters {
+			target = filter(target)
+		}
+		found = append(found, target)
 	}
 	return
 }
@@ -90,7 +121,7 @@ func (d *discoverer) DiscoverDevices(ctx context.Context) ([]TargetDescriptor, e
 	if err != nil {
 		return nil, err
 	}
-	return translate(devices), nil
+	return translate(devices, filterEmptyLabels, filterIPv6Addresses), nil
 }
 
 var ErrStaleResults = errors.New("potentially stale results")
