@@ -1,0 +1,9 @@
+Package: tailscalesd
+Version: %VERSION%
+Section: net
+Priority: optional
+Architecture: %ARCH%
+Essential: no
+Installed-Size: %SIZE%
+Maintainer: Christian Funkhouser <christian@funkhouse.rs>
+Description: Prometheus Service Discovery for Tailscale

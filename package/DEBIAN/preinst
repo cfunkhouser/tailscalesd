@@ -1,0 +1,11 @@
+#!/bin/sh
+addgroup --system tailscalesd
+adduser --system \
+    --no-create-home \
+    --home /var/lib/tailscalesd \
+    --ingroup tailscalesd \
+    --gecos "TailscaleSD User" \
+    tailscalesd
+
+mkdir -m 0755 -p /var/lib/tailscalesd
+chown -R tailscalesd:tailscalesd /var/lib/tailscalesd

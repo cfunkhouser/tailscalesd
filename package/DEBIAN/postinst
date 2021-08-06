@@ -1,0 +1,3 @@
+#!/bin/sh
+/bin/systemctl enable tailscalesd.service
+/bin/systemctl start tailscalesd.service

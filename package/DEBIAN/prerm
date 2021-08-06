@@ -1,0 +1,3 @@
+#!/bin/sh
+/bin/systemctl stop tailscalesd.service
+/bin/systemctl disable tailscalesd.service

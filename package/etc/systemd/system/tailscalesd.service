@@ -1,0 +1,16 @@
+[Unit]
+Description=Prometheus Service Discovery for Tailscale
+Documentation=https://github.com/cfunkhouser/tailscalesd
+
+[Service]
+Restart=on-failure
+User=tailscalesd
+Group=tailscalesd
+EnvironmentFile=/etc/tailscalesd.env
+ExecStart=/usr/bin/tailscalesd
+ExecReload=/bin/kill -HUP $MAINPID
+TimeoutStopSec=20s
+SendSIGKILL=no
+
+[Install]
+WantedBy=multi-user.target
