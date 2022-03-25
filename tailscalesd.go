@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cfunkhouser/tailscalesd/internal/tailscale"
+	"github.com/cfunkhouser/tailscalesd/internal/tailscale/local"
+	"github.com/cfunkhouser/tailscalesd/internal/tailscale/public"
 )
 
 // TargetDescriptor as Prometheus expects it. For more details, see
@@ -24,22 +26,38 @@ type TargetDescriptor struct {
 	Labels  map[string]string `json:"labels,omitempty"`
 }
 
-// v2API describes subset of the Tailscale API needed for discovering things.
-type v2API interface {
-	Devices(context.Context) ([]tailscale.Device, error)
-}
-
 const (
-	labelMetaDeviceAuthorized    = "__meta_tailscale_device_authorized"
-	labelMetaDeviceClientVersion = "__meta_tailscale_device_client_version"
-	labelMetaDeviceHostname      = "__meta_tailscale_device_hostname"
-	labelMetaDeviceID            = "__meta_tailscale_device_id"
-	labelMetaDeviceIsExternal    = "__meta_tailscale_device_is_external"
-	labelMetaDeviceMachineKey    = "__meta_tailscale_device_machine_key"
-	labelMetaDeviceName          = "__meta_tailscale_device_name"
-	labelMetaDeviceNodeKey       = "__meta_tailscale_device_node_key"
-	labelMetaDeviceOS            = "__meta_tailscale_device_os"
-	labelMetaDeviceUser          = "__meta_tailscale_device_user"
+	// LabelMetaAPI is the host which provided the details about this device.
+	// Will be "localhost" for the local API.
+	LabelMetaAPI = "__meta_tailscale_api"
+
+	// LabelMetaDeviceAuthorized is whether the target is currently authorized on the Tailnet.
+	// Will always be true when using the local API.
+	LabelMetaDeviceAuthorized = "__meta_tailscale_device_authorized"
+
+	// LabelMetaDeviceClientVersion is the Tailscale client version in use on
+	// target. Not reported when using the local API.
+	LabelMetaDeviceClientVersion = "__meta_tailscale_device_client_version"
+
+	// LabelMetaDeviceHostname is the short hostname of the device.
+	LabelMetaDeviceHostname = "__meta_tailscale_device_hostname"
+
+	// LabelMetaDeviceID is the target's unique ID within Tailscale, as reported
+	// by the API. The public API reports this as a large integer. The local API
+	// reports a base64 string.
+	// string.
+	LabelMetaDeviceID = "__meta_tailscale_device_id"
+
+	// LabelMetaDeviceName is the name of the device as reported by the API. Not
+	// reported when using the local API.
+	LabelMetaDeviceName = "__meta_tailscale_device_name"
+
+	// LabelMetaDeviceOS is the OS of the target.
+	LabelMetaDeviceOS = "__meta_tailscale_device_os"
+
+	// LabelMetaTailnet is the name of the Tailnet from which this target
+	// information was retrieved. Not reported when using the local API.
+	LabelMetaTailnet = "__meta_tailscale_tailnet"
 )
 
 // filterEmpty removes entries in a map which have either an empty key or empty
@@ -91,16 +109,14 @@ func translate(devices []tailscale.Device, filters ...filter) (found []TargetDes
 		target := TargetDescriptor{
 			Targets: d.Addresses,
 			Labels: map[string]string{
-				labelMetaDeviceAuthorized:    fmt.Sprint(d.Authorized),
-				labelMetaDeviceClientVersion: d.ClientVersion,
-				labelMetaDeviceHostname:      d.Hostname,
-				labelMetaDeviceID:            d.ID,
-				labelMetaDeviceIsExternal:    fmt.Sprint(d.IsExternal),
-				labelMetaDeviceMachineKey:    d.MachineKey,
-				labelMetaDeviceName:          d.Name,
-				labelMetaDeviceNodeKey:       d.NodeKey,
-				labelMetaDeviceOS:            d.OS,
-				labelMetaDeviceUser:          d.User,
+				LabelMetaAPI:                 d.API,
+				LabelMetaDeviceAuthorized:    fmt.Sprint(d.Authorized),
+				LabelMetaDeviceClientVersion: d.ClientVersion,
+				LabelMetaDeviceHostname:      d.Hostname,
+				LabelMetaDeviceID:            d.ID,
+				LabelMetaDeviceName:          d.Name,
+				LabelMetaDeviceOS:            d.OS,
+				LabelMetaTailnet:             d.Tailnet,
 			},
 		}
 		for _, filter := range filters {
@@ -111,8 +127,12 @@ func translate(devices []tailscale.Device, filters ...filter) (found []TargetDes
 	return
 }
 
+type tailscaleAPI interface {
+	Devices(context.Context) ([]tailscale.Device, error)
+}
+
 type discoverer struct {
-	ts v2API
+	ts tailscaleAPI
 }
 
 // DiscoverDevices in a tailnet.
@@ -182,6 +202,20 @@ func defaultHTTPClient() *http.Client {
 	}
 }
 
+func UsingLocalAPI() tailscaleAPI {
+	// TODO(cfunkhouser): Make this configurable.
+	return local.New("/run/tailscale/tailscaled.sock")
+}
+
+func UsingPublicAPI(tailnet, token string) tailscaleAPI {
+	return &public.API{
+		Client:  defaultHTTPClient(),
+		APIBase: tailscale.PublicAPI,
+		Tailnet: tailnet,
+		Token:   token,
+	}
+}
+
 type Option func(Discoverer) Discoverer
 
 func WithRateLimit(freq time.Duration) Option {
@@ -198,14 +232,9 @@ type Discoverer interface {
 	DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error)
 }
 
-func New(tailnet, token string, opts ...Option) Discoverer {
+func New(api tailscaleAPI, opts ...Option) Discoverer {
 	var d Discoverer = &discoverer{
-		ts: &tailscale.API{
-			Client:  defaultHTTPClient(),
-			APIBase: tailscale.ProductionAPI,
-			Tailnet: tailnet,
-			Token:   token,
-		},
+		ts: api,
 	}
 	for _, opt := range opts {
 		d = opt(d)

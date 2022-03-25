@@ -1,8 +1,10 @@
+*.dll
+*.dylib
 *.exe
 *.exe~
-*.dll
-*.so
-*.dylib
-*.test
+*.json
 *.out
+*.so
+*.test
+*.yaml
 *.yml

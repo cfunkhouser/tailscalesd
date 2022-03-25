@@ -11,19 +11,36 @@ The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
 HTTP server. It respects four configuration parameters, each of which may be
 specified as a flag or an environment variable.
 
-- `--token` / `TAILSCALE_API_TOKEN` is a Tailscale API token with appropriate
-  permissions to access the Tailscale API and iterate devices.
-- `--tailnet` / `TAILNET` is the name of the tailnet to enumerate.
-- `--address` / `ADDRESS` is the host:port on which to serve Tailscale SD.
+- `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
   Defaults to `0.0.0.0:9242`.
-- `--poll` / `TAILSCALE_API_POLL_LIMIT` is the limit of how frequently the
+- `-poll` / `TAILSCALE_API_POLL_LIMIT` is the limit of how frequently the
   Tailscale API may be polled. Cached results are served between intervals.
-  Defaults to 5 minutes.
+  Defaults to 5 minutes. Also applies to local API.
+- `-localapi` / `TAILSCALE_USE_LOCAL_API` instructs TailscaleSD to use the
+  `tailscaled`-exported local API for discovery.
+- `-tailnet` / `TAILNET` is the name of the tailnet to enumerate. Required
+  when using the public API.
+- `-token` / `TAILSCALE_API_TOKEN` is a Tailscale API token with appropriate
+  permissions to access the Tailscale API and enumerate devices. Required when
+  using the public API.
 
 ```console
 $ TAILSCALE_API_TOKEN=SUPERSECRET tailscalesd --tailnet alice@gmail.com
 2021-08-04T15:38:14Z Serving Tailscale service discovery on "0.0.0.0:9242"
 ```
+
+### Public vs Local API
+
+TailscaleSD is capable of discovering devices both from Tailscale's public API,
+and from the local API served by `tailscaled` on the node on which TailscaleSD
+is run. By using the public API, TailscaleSD will dicover _all_ devices in the
+tailnet, regardless of whether the local node is able to reach them or not.
+Devices found using the local API will be reachable from the local node,
+according to your Tailscale ACLs.
+
+See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details about
+which labels are supported for each API type. **Do not assume they will be the
+same labels, or that values will match across the APIs!**
 
 ## Prometheus Configuration
 
@@ -34,18 +51,16 @@ API did not return a value will be omitted. For more details on each field and
 the API in general, see:
 https://github.com/tailscale/tailscale/blob/main/api.md#tailnet-devices-get
 
-Possible target labels:
+Possible target labels follow. See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details.
 
+- `__meta_tailscale_api`
 - `__meta_tailscale_device_authorized`
 - `__meta_tailscale_device_client_version`
 - `__meta_tailscale_device_hostname`
 - `__meta_tailscale_device_id`
-- `__meta_tailscale_device_is_external`
-- `__meta_tailscale_device_machine_key`
 - `__meta_tailscale_device_name`
-- `__meta_tailscale_device_node_key`
 - `__meta_tailscale_device_os`
-- `__meta_tailscale_device_user`
+- `__meta_tailscale_tailnet`
 
 ### Example: Pinging Tailscale Hosts
 
