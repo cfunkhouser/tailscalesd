@@ -48,7 +48,6 @@ type interestingPeerStatusSubset struct {
 // API client for the Tailscale local API.
 type API struct {
 	client *http.Client
-	base   string
 }
 
 var ErrFailedRequest = errors.New("failed localapi call")
