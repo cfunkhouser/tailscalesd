@@ -51,7 +51,9 @@ API did not return a value will be omitted. For more details on each field and
 the API in general, see:
 https://github.com/tailscale/tailscale/blob/main/api.md#tailnet-devices-get
 
-Possible target labels follow. See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details.
+Possible target labels follow. See the label comments in
+[`tailscalesd.go`](./tailscalesd.go) for details. There will be one target entry
+for each unique combination of all labels.
 
 - `__meta_tailscale_api`
 - `__meta_tailscale_device_authorized`
@@ -60,6 +62,7 @@ Possible target labels follow. See the label comments in [`tailscalesd.go`](./ta
 - `__meta_tailscale_device_id`
 - `__meta_tailscale_device_name`
 - `__meta_tailscale_device_os`
+- `__meta_tailscale_device_tag`
 - `__meta_tailscale_tailnet`
 
 ### Example: Pinging Tailscale Hosts

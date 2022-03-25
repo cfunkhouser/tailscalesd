@@ -15,4 +15,5 @@ type Device struct {
 	Name          string   `json:"name"`
 	OS            string   `json:"os"`
 	Tailnet       string   `json:"tailnet"`
+	Tags          []string `json:"tags"`
 }

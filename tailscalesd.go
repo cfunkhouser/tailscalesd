@@ -55,6 +55,9 @@ const (
 	// LabelMetaDeviceOS is the OS of the target.
 	LabelMetaDeviceOS = "__meta_tailscale_device_os"
 
+	// LabelMetaDeviceTag is a Tailscale ACL tag applied to the target.
+	LabelMetaDeviceTag = "__meta_tailscale_device_tag"
+
 	// LabelMetaTailnet is the name of the Tailnet from which this target
 	// information was retrieved. Not reported when using the local API.
 	LabelMetaTailnet = "__meta_tailscale_tailnet"
@@ -108,6 +111,7 @@ func translate(devices []tailscale.Device, filters ...filter) (found []TargetDes
 	for _, d := range devices {
 		target := TargetDescriptor{
 			Targets: d.Addresses,
+			// All labels added here, except for tags.
 			Labels: map[string]string{
 				LabelMetaAPI:                 d.API,
 				LabelMetaDeviceAuthorized:    fmt.Sprint(d.Authorized),
@@ -122,7 +126,19 @@ func translate(devices []tailscale.Device, filters ...filter) (found []TargetDes
 		for _, filter := range filters {
 			target = filter(target)
 		}
-		found = append(found, target)
+		if l := len(d.Tags); l == 0 {
+			found = append(found, target)
+			continue
+		}
+		for _, t := range d.Tags {
+			lt := target
+			lt.Labels = make(map[string]string)
+			for k, v := range target.Labels {
+				lt.Labels[k] = v
+			}
+			lt.Labels[LabelMetaDeviceTag] = t
+			found = append(found, lt)
+		}
 	}
 	return
 }
