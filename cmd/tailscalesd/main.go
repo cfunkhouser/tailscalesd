@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cfunkhouser/tailscalesd"
@@ -13,11 +14,12 @@ import (
 )
 
 var (
-	address   string = "0.0.0.0:9242"
-	token     string
-	tailnet   string
-	printVer  bool
-	pollLimit time.Duration = time.Minute * 5
+	address     string = "0.0.0.0:9242"
+	token       string
+	tailnet     string
+	printVer    bool
+	pollLimit   time.Duration = time.Minute * 5
+	useLocalAPI bool
 
 	// Version of tailscalesd. Set at build time to something meaningful.
 	Version = "development"
@@ -26,6 +28,14 @@ var (
 func envVarWithDefault(key, def string) string {
 	if val, ok := os.LookupEnv(key); ok {
 		return val
+	}
+	return def
+}
+
+func boolEnvVarWithDefault(key string, def bool) bool {
+	if val, ok := os.LookupEnv(key); ok {
+		val = strings.ToLower(strings.TrimSpace(val))
+		return val == "true" || val == "yes"
 	}
 	return def
 }
@@ -47,6 +57,7 @@ func defineFlags() {
 	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
 	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
 	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
+	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
 }
 
 func main() {
@@ -61,13 +72,18 @@ func main() {
 		return
 	}
 
-	if token == "" || tailnet == "" {
-		fmt.Println("Both -token and -tailnet are required.")
+	if !useLocalAPI && (token == "" || tailnet == "") {
+		fmt.Println("Both -token and -tailnet are required when using the public API")
 		flag.Usage()
 		return
 	}
 
-	d := tailscalesd.New(tailnet, token, tailscalesd.WithRateLimit(pollLimit))
+	var d tailscalesd.Discoverer
+	if useLocalAPI {
+		d = tailscalesd.New(tailscalesd.UsingLocalAPI(), tailscalesd.WithRateLimit(pollLimit))
+	} else {
+		d = tailscalesd.New(tailscalesd.UsingPublicAPI(tailnet, token), tailscalesd.WithRateLimit(pollLimit))
+	}
 	http.Handle("/", tailscalesd.Export(d, time.Minute*5))
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))
