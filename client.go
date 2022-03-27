@@ -1,5 +1,5 @@
 // Package tailscale contains types needed for both API implementations.
-package tailscale
+package tailscalesd
 
 import (
 	"context"

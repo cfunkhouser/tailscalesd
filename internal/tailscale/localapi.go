@@ -1,32 +1,23 @@
-// Package local is a client for the Tailscale local API, which is exported by
-// tailscaled. It has only the functionality needed for tailscalesd. You should
-// not rely on its API for anything else.
-package local
+package tailscale
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 
 	"inet.af/netaddr"
-
-	"github.com/cfunkhouser/tailscalesd/internal/tailscale"
 )
 
-// unixDialer is a DialContext allowing HTTP communication via a unix  domain
-// socket.
-func unixDialer(socket string) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return net.Dial("unix", socket)
-	}
-}
+// LocalAPISocket is the path to the Unix domain socket on which tailscaled
+// listens locally.
+const LocalAPISocket = "/run/tailscale/tailscaled.sock"
 
 // interstingStatusSubset is a json-decodeable subset of the Status struct
-// served by the Tailscale local API. This is done to prevent pulling the Tailscale code base and its dependencies into this module.
-// The fields were borrowed from version 1.22.2. For field details, see:
+// served by the Tailscale local API. This is done to prevent pulling the
+// Tailscale code base and its dependencies into this module. The fields were
+// borrowed from version 1.22.2. For field details, see:
 // https://pkg.go.dev/tailscale.com@v1.22.2/ipn/ipnstate?utm_source=gopls#Status
 type interestingStatusSubset struct {
 	TailscaleIPs []netaddr.IP // Tailscale IP(s) assigned to this node
@@ -45,14 +36,12 @@ type interestingPeerStatusSubset struct {
 	Tags         []string `json:",omitempty"`
 }
 
-// API client for the Tailscale local API.
-type API struct {
+type localAPIClient struct {
 	client *http.Client
+	socket string
 }
 
-var ErrFailedRequest = errors.New("failed localapi call")
-
-func (a *API) status(ctx context.Context) (interestingStatusSubset, error) {
+func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, error) {
 	var status interestingStatusSubset
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/localapi/v0/status", nil)
 	if err != nil {
@@ -74,7 +63,7 @@ func (a *API) status(ctx context.Context) (interestingStatusSubset, error) {
 	return status, nil
 }
 
-func translatePeerToDevice(p *interestingPeerStatusSubset, d *tailscale.Device) {
+func translatePeerToDevice(p *interestingPeerStatusSubset, d *Device) {
 	for i := range p.TailscaleIPs {
 		d.Addresses = append(d.Addresses, p.TailscaleIPs[i].String())
 	}
@@ -89,12 +78,12 @@ func translatePeerToDevice(p *interestingPeerStatusSubset, d *tailscale.Device) 
 }
 
 // Devices reported by the Tailscale local API as peers of the local host.
-func (a *API) Devices(ctx context.Context) ([]tailscale.Device, error) {
+func (a *localAPIClient) Devices(ctx context.Context) ([]Device, error) {
 	status, err := a.status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	devices := make([]tailscale.Device, len(status.Peer))
+	devices := make([]Device, len(status.Peer))
 	var i int
 	for _, peer := range status.Peer {
 		translatePeerToDevice(peer, &devices[i])
@@ -103,12 +92,22 @@ func (a *API) Devices(ctx context.Context) ([]tailscale.Device, error) {
 	return devices, nil
 }
 
-func New(socket string) *API {
-	return &API{
-		client: &http.Client{
-			Transport: &http.Transport{
-				DialContext: unixDialer(socket),
-			},
+// unixDialer is a DialContext allowing HTTP communication via a unix  domain
+// socket.
+func (a *localAPIClient) unixDialer(ctx context.Context, _, _ string) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "unix", a.socket)
+}
+
+// LocalAPI client polls the Tailscale localapi for peer devices.
+func LocalAPI(socket string) Client {
+	api := &localAPIClient{
+		socket: socket,
+	}
+	api.client = &http.Client{
+		Transport: &http.Transport{
+			DialContext: api.unixDialer,
 		},
 	}
+	return api
 }

@@ -78,13 +78,14 @@ func main() {
 		return
 	}
 
-	var d tailscalesd.Discoverer
+	var ts tailscalesd.Client
 	if useLocalAPI {
-		d = tailscalesd.New(tailscalesd.UsingLocalAPI(), tailscalesd.WithRateLimit(pollLimit))
+		ts = tailscalesd.LocalAPI(tailscalesd.LocalAPISocket)
 	} else {
-		d = tailscalesd.New(tailscalesd.UsingPublicAPI(tailnet, token), tailscalesd.WithRateLimit(pollLimit))
+		ts = tailscalesd.PublicAPI(tailnet, token)
 	}
-	http.Handle("/", tailscalesd.Export(d, time.Minute*5))
+	ts = tailscalesd.RateLimit(ts, pollLimit)
+	http.Handle("/", tailscalesd.Export(ts))
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))
 	log.Print("Done")
