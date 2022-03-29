@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cfunkhouser/tailscalesd"
-	"github.com/cfunkhouser/tailscalesd/internal/logwriter"
 )
 
 var (
@@ -60,9 +59,21 @@ func defineFlags() {
 	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
 }
 
+type logWriter struct {
+	TZ     *time.Location
+	Format string
+}
+
+func (w *logWriter) Write(data []byte) (int, error) {
+	return fmt.Printf("%v %v", time.Now().In(w.TZ).Format(w.Format), string(data))
+}
+
 func main() {
 	log.SetFlags(0)
-	log.SetOutput(logwriter.Default())
+	log.SetOutput(&logWriter{
+		TZ:     time.UTC,
+		Format: time.RFC3339,
+	})
 
 	defineFlags()
 	flag.Parse()
