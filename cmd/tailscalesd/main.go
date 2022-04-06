@@ -107,7 +107,10 @@ func main() {
 	} else {
 		ts = tailscalesd.PublicAPI(tailnet, token)
 	}
-	ts = tailscalesd.RateLimit(ts, pollLimit)
+	ts = &tailscalesd.RateLimitedDiscoverer{
+		Wrap:      ts,
+		Frequency: pollLimit,
+	}
 	http.Handle("/", tailscalesd.Export(ts))
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))

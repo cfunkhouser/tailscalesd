@@ -3,9 +3,11 @@ package tailscalesd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"inet.af/netaddr"
 )
@@ -38,8 +40,9 @@ type interestingPeerStatusSubset struct {
 
 type localAPIClient struct {
 	client *http.Client
-	socket string
 }
+
+var errFailedLocalAPIRequest = errors.New("failed local API request")
 
 func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, error) {
 	var status interestingStatusSubset
@@ -53,7 +56,7 @@ func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, e
 	}
 
 	if (resp.StatusCode / 100) != 2 {
-		return status, fmt.Errorf("%w: %v", errFailedRequest, resp.Status)
+		return status, fmt.Errorf("%w: %v", errFailedLocalAPIRequest, resp.Status)
 	}
 	defer resp.Body.Close()
 
@@ -67,12 +70,10 @@ func translatePeerToDevice(p *interestingPeerStatusSubset, d *Device) {
 	for i := range p.TailscaleIPs {
 		d.Addresses = append(d.Addresses, p.TailscaleIPs[i].String())
 	}
-
-	// Assumes that if the peer is listed in localapi, it is authorized enough.
-	d.Authorized = true
 	d.API = "localhost"
+	d.Authorized = true // localapi returned peer; assume it's authorized enough
 	d.Hostname = p.HostName
-	d.ID = fmt.Sprintf("%v", p.ID)
+	d.ID = p.ID
 	d.OS = p.OS
 	d.Tags = p.Tags[:]
 }
@@ -92,22 +93,31 @@ func (a *localAPIClient) Devices(ctx context.Context) ([]Device, error) {
 	return devices, nil
 }
 
-// unixDialer is a DialContext allowing HTTP communication via a unix  domain
-// socket.
-func (a *localAPIClient) unixDialer(ctx context.Context, _, _ string) (net.Conn, error) {
-	var d net.Dialer
-	return d.DialContext(ctx, "unix", a.socket)
+type dialContext func(context.Context, string, string) (net.Conn, error)
+
+func unixSocketDialer(socket string) dialContext {
+	return func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", socket)
+	}
+}
+
+func defaultHTTPClientWithDialer(dc dialContext) *http.Client {
+	return &http.Client{
+		Timeout: time.Second * 10,
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout: 5 * time.Second,
+			}).Dial,
+			DialContext:         dc,
+			TLSHandshakeTimeout: 5 * time.Second,
+		},
+	}
 }
 
 // LocalAPI Discoverer interrogates the Tailscale localapi for peer devices.
 func LocalAPI(socket string) Discoverer {
-	api := &localAPIClient{
-		socket: socket,
+	return &localAPIClient{
+		client: defaultHTTPClientWithDialer(unixSocketDialer(socket)),
 	}
-	api.client = &http.Client{
-		Transport: &http.Transport{
-			DialContext: api.unixDialer,
-		},
-	}
-	return api
 }

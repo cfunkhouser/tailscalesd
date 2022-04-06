@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -21,8 +20,8 @@ const (
 	// Will be "localhost" for the local API.
 	LabelMetaAPI = "__meta_tailscale_api"
 
-	// LabelMetaDeviceAuthorized is whether the target is currently authorized on the Tailnet.
-	// Will always be true when using the local API.
+	// LabelMetaDeviceAuthorized is whether the target is currently authorized
+	// on the Tailnet. Will always be true when using the local API.
 	LabelMetaDeviceAuthorized = "__meta_tailscale_device_authorized"
 
 	// LabelMetaDeviceClientVersion is the Tailscale client version in use on
@@ -53,8 +52,6 @@ const (
 	LabelMetaTailnet = "__meta_tailscale_tailnet"
 )
 
-var errFailedRequest = errors.New("failed localapi call")
-
 // Device in a Tailnet, as reported by one of the various Tailscale APIs.
 type Device struct {
 	Addresses     []string `json:"addresses"`
@@ -71,8 +68,8 @@ type Device struct {
 
 // Discoverer of things exposed by the various Tailscale APIs.
 type Discoverer interface {
-	// Devices reported by the Tailscale public API as belonging to the configured
-	// tailnet.
+	// Devices reported by the Tailscale public API as belonging to the
+	// configured tailnet.
 	Devices(context.Context) ([]Device, error)
 }
 
@@ -83,9 +80,32 @@ type TargetDescriptor struct {
 	Labels  map[string]string `json:"labels,omitempty"`
 }
 
-// filterEmpty removes entries in a map which have either an empty key or empty
-// value.
-func filterEmpty(in map[string]string) map[string]string {
+type filter func(TargetDescriptor) TargetDescriptor
+
+func filterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
+	var targets []string
+	for _, target := range td.Targets {
+		ip := net.ParseIP(target)
+		if ip == nil {
+			// target is not a valid IP address of any version, but this filter
+			// is explicitly for IPv6 addresses, so we leave the garbage in
+			// place.
+			targets = append(targets, target)
+			continue
+		}
+		if ipv4 := ip.To4(); ipv4 != nil {
+			targets = append(targets, ipv4.String())
+		}
+	}
+	return TargetDescriptor{
+		Targets: targets,
+		Labels:  td.Labels,
+	}
+}
+
+// excludeEmptyMapEntries removes entries in a map which have either an empty
+// key or empty value.
+func excludeEmptyMapEntries(in map[string]string) map[string]string {
 	if in == nil {
 		return nil
 	}
@@ -99,30 +119,10 @@ func filterEmpty(in map[string]string) map[string]string {
 	return filtered
 }
 
-type filter func(TargetDescriptor) TargetDescriptor
-
-func filterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
-	var targets []string
-	for _, target := range td.Targets {
-		ip := net.ParseIP(target)
-		if ip == nil {
-			// target is not a valid IP address of any version.
-			continue
-		}
-		if ipv4 := ip.To4(); ipv4 != nil {
-			targets = append(targets, ipv4.String())
-		}
-	}
-	return TargetDescriptor{
-		Targets: targets,
-		Labels:  td.Labels,
-	}
-}
-
 func filterEmptyLabels(td TargetDescriptor) TargetDescriptor {
 	return TargetDescriptor{
 		Targets: td.Targets,
-		Labels:  filterEmpty(td.Labels),
+		Labels:  excludeEmptyMapEntries(td.Labels),
 	}
 }
 
@@ -168,15 +168,26 @@ type discoveryHandler struct {
 	filters []filter
 }
 
+func serveAndLog(w io.Writer, msg string) {
+	log.Print(msg)
+	fmt.Fprint(w, msg)
+}
+
 func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.ts == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		serveAndLog(w, "Attempted to serve with an improperly initialized handler.")
+		return
+	}
 	devices, err := h.ts.Devices(r.Context())
 	if err != nil {
 		if err != errStaleResults {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Printf("Failed to discover Tailscale devices: %v", err)
-			fmt.Fprintf(w, "Failed to discover Tailscale devices: %v", err)
+			serveAndLog(w, fmt.Sprintf("Failed to discover Tailscale devices: %v", err))
 			return
 		}
+		// TODO(cfunkhouser): Investigate whether Prometheus respects cache
+		// control headers, and implement accordingly here.
 		log.Print("Serving potentially stale results")
 	}
 	targets := translate(devices, h.filters...)
@@ -184,15 +195,15 @@ func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(targets); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Failed encoding targets to JSON: %v", err)
-		fmt.Fprintf(w, "Failed encoding targets to JSON: %v", err)
+		serveAndLog(w, fmt.Sprintf("Failed encoding targets to JSON: %v", err))
 		return
 	}
 
-	w.Header().Add("Content-Type", "application/json")
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	if _, err := io.Copy(w, &buf); err != nil {
-		// The transaction with the client is already started, so there's nothing
-		// graceful to do here. Log any errors for troubleshooting later.
+		// The transaction with the client is already started, so there's
+		// nothing graceful to do here. Log any errors for troubleshooting
+		// later.
 		log.Printf("Failed sending JSON payload to the client: %v", err)
 	}
 }
