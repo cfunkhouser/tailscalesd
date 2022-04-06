@@ -1,6 +1,3 @@
-// Package tailscale is a naive, bespoke Tailscale API client supporting both
-// the public v2 and local APIs. It has only the functionality needed for
-// tailscalesd. You should not rely on it for anything else.
 package tailscalesd
 
 import (
@@ -19,14 +16,14 @@ type deviceAPIResponse struct {
 	Devices []Device `json:"devices"`
 }
 
-type publicAPIClient struct {
+type publicAPIDiscoverer struct {
 	client  *http.Client
 	apiBase string
 	tailnet string
 	token   string
 }
 
-func (a *publicAPIClient) Devices(ctx context.Context) ([]Device, error) {
+func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	url := fmt.Sprintf("https://%v@%v/api/v2/tailnet/%v/devices", a.token, a.apiBase, a.tailnet)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -37,7 +34,7 @@ func (a *publicAPIClient) Devices(ctx context.Context) ([]Device, error) {
 		return nil, err
 	}
 	if (resp.StatusCode / 100) != 2 {
-		return nil, fmt.Errorf("%w: %v", ErrFailedRequest, resp.Status)
+		return nil, fmt.Errorf("%w: %v", errFailedRequest, resp.Status)
 	}
 	defer resp.Body.Close()
 	var d deviceAPIResponse
@@ -63,23 +60,23 @@ func defaultHTTPClient() *http.Client {
 	}
 }
 
-type PublicAPIOption func(*publicAPIClient)
+type PublicAPIOption func(*publicAPIDiscoverer)
 
 func WithAPIHost(host string) PublicAPIOption {
-	return func(api *publicAPIClient) {
+	return func(api *publicAPIDiscoverer) {
 		api.apiBase = host
 	}
 }
 
 func WithHTTPClient(client *http.Client) PublicAPIOption {
-	return func(api *publicAPIClient) {
+	return func(api *publicAPIDiscoverer) {
 		api.client = client
 	}
 }
 
 // PublicAPI client polls the public Tailscale API for hosts in the tailnet.
-func PublicAPI(tailnet, token string, opts ...PublicAPIOption) Client {
-	api := &publicAPIClient{
+func PublicAPI(tailnet, token string, opts ...PublicAPIOption) Discoverer {
+	api := &publicAPIDiscoverer{
 		apiBase: PublicAPIHost,
 		tailnet: tailnet,
 		token:   token,

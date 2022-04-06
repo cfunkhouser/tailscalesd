@@ -1,22 +1,20 @@
-// Package tailscalesd provides Prometheus Service Discovery for Tailscale.
+// Package tailscalesd provides Prometheus Service Discovery for Tailscale using
+// a naive, bespoke Tailscale API client supporting both the public v2 and local
+// APIs. It has only the functionality needed for tailscalesd. You should not
+// be tempted to use it for anything else.
 package tailscalesd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 )
-
-// TargetDescriptor as Prometheus expects it. For more details, see
-// https://prometheus.io/docs/prometheus/latest/http_sd/.
-type TargetDescriptor struct {
-	Targets []string          `json:"targets"`
-	Labels  map[string]string `json:"labels,omitempty"`
-}
 
 const (
 	// LabelMetaAPI is the host which provided the details about this device.
@@ -54,6 +52,36 @@ const (
 	// information was retrieved. Not reported when using the local API.
 	LabelMetaTailnet = "__meta_tailscale_tailnet"
 )
+
+var errFailedRequest = errors.New("failed localapi call")
+
+// Device in a Tailnet, as reported by one of the various Tailscale APIs.
+type Device struct {
+	Addresses     []string `json:"addresses"`
+	API           string   `json:"api"`
+	Authorized    bool     `json:"authorized"`
+	ClientVersion string   `json:"clientVersion,omitempty"`
+	Hostname      string   `json:"hostname"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	OS            string   `json:"os"`
+	Tailnet       string   `json:"tailnet"`
+	Tags          []string `json:"tags"`
+}
+
+// Discoverer of things exposed by the various Tailscale APIs.
+type Discoverer interface {
+	// Devices reported by the Tailscale public API as belonging to the configured
+	// tailnet.
+	Devices(context.Context) ([]Device, error)
+}
+
+// TargetDescriptor as Prometheus expects it. For more details, see
+// https://prometheus.io/docs/prometheus/latest/http_sd/.
+type TargetDescriptor struct {
+	Targets []string          `json:"targets"`
+	Labels  map[string]string `json:"labels,omitempty"`
+}
 
 // filterEmpty removes entries in a map which have either an empty key or empty
 // value.
@@ -136,14 +164,14 @@ func translate(devices []Device, filters ...filter) (found []TargetDescriptor) {
 }
 
 type discoveryHandler struct {
-	ts      Client
+	ts      Discoverer
 	filters []filter
 }
 
 func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.ts.Devices(r.Context())
 	if err != nil {
-		if err != ErrStaleResults {
+		if err != errStaleResults {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("Failed to discover Tailscale devices: %v", err)
 			fmt.Fprintf(w, "Failed to discover Tailscale devices: %v", err)
@@ -169,8 +197,8 @@ func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Export the Tailscale client for Service Discovery.
-func Export(ts Client) http.Handler {
+// Export the Tailscale Discoverer for Service Discovery via HTTP.
+func Export(ts Discoverer) http.Handler {
 	return &discoveryHandler{
 		ts: ts,
 		// TODO(cfunkhouser): Make these filters configurable.

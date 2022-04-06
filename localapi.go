@@ -53,7 +53,7 @@ func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, e
 	}
 
 	if (resp.StatusCode / 100) != 2 {
-		return status, fmt.Errorf("%w: %v", ErrFailedRequest, resp.Status)
+		return status, fmt.Errorf("%w: %v", errFailedRequest, resp.Status)
 	}
 	defer resp.Body.Close()
 
@@ -99,8 +99,8 @@ func (a *localAPIClient) unixDialer(ctx context.Context, _, _ string) (net.Conn,
 	return d.DialContext(ctx, "unix", a.socket)
 }
 
-// LocalAPI client polls the Tailscale localapi for peer devices.
-func LocalAPI(socket string) Client {
+// LocalAPI Discoverer interrogates the Tailscale localapi for peer devices.
+func LocalAPI(socket string) Discoverer {
 	api := &localAPIClient{
 		socket: socket,
 	}

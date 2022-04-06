@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-var ErrStaleResults = errors.New("stale discovery results")
+var errStaleResults = errors.New("stale discovery results")
 
-type rateLimitingClient struct {
-	wrapped Client
+type rateLimitingDiscoverer struct {
+	wrapped Discoverer
 	freq    time.Duration
 
 	mu       sync.RWMutex
@@ -18,7 +18,7 @@ type rateLimitingClient struct {
 	last     []Device
 }
 
-func (c *rateLimitingClient) refreshDevices(ctx context.Context) ([]Device, error) {
+func (c *rateLimitingDiscoverer) refreshDevices(ctx context.Context) ([]Device, error) {
 	devices, err := c.wrapped.Devices(ctx)
 	if err != nil {
 		return devices, err
@@ -31,7 +31,7 @@ func (c *rateLimitingClient) refreshDevices(ctx context.Context) ([]Device, erro
 	return devices, nil
 }
 
-func (c *rateLimitingClient) Devices(ctx context.Context) ([]Device, error) {
+func (c *rateLimitingDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	c.mu.RLock()
 	expired := time.Now().After(c.earliest)
 	last := make([]Device, len(c.last))
@@ -46,9 +46,9 @@ func (c *rateLimitingClient) Devices(ctx context.Context) ([]Device, error) {
 
 // RateLimit requests to the API underlying client to be no more frequent than
 // freq, returning cached values if more frequent calls are made.
-func RateLimit(client Client, freq time.Duration) Client {
-	return &rateLimitingClient{
-		wrapped: client,
+func RateLimit(d Discoverer, freq time.Duration) Discoverer {
+	return &rateLimitingDiscoverer{
+		wrapped: d,
 		freq:    freq,
 	}
 }
