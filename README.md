@@ -8,16 +8,18 @@ https://prometheus.io/docs/prometheus/latest/http_sd/
 ## Usage
 
 The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
-HTTP server. It respects four configuration parameters, each of which may be
-specified as a flag or an environment variable.
+HTTP server. It respects the following configuration parameters, each of which
+may be specified as a flag or an environment variable.
 
 - `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
   Defaults to `0.0.0.0:9242`.
+- `-localapi` / `TAILSCALE_USE_LOCAL_API` instructs TailscaleSD to use the
+  `tailscaled`-exported local API for discovery.
+- `-localapi_socket` / `TAILSCALE_LOCAL_API_SOCKET` is the path to the Unix
+  domain socket over which `tailscaled` serves the local API.
 - `-poll` / `TAILSCALE_API_POLL_LIMIT` is the limit of how frequently the
   Tailscale API may be polled. Cached results are served between intervals.
   Defaults to 5 minutes. Also applies to local API.
-- `-localapi` / `TAILSCALE_USE_LOCAL_API` instructs TailscaleSD to use the
-  `tailscaled`-exported local API for discovery.
 - `-tailnet` / `TAILNET` is the name of the tailnet to enumerate. Required
   when using the public API.
 - `-token` / `TAILSCALE_API_TOKEN` is a Tailscale API token with appropriate

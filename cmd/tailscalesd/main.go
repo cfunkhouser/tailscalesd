@@ -10,16 +10,16 @@ import (
 	"time"
 
 	"github.com/cfunkhouser/tailscalesd"
-	"github.com/cfunkhouser/tailscalesd/internal/logwriter"
 )
 
 var (
-	address     string = "0.0.0.0:9242"
-	token       string
-	tailnet     string
-	printVer    bool
-	pollLimit   time.Duration = time.Minute * 5
-	useLocalAPI bool
+	address        string = "0.0.0.0:9242"
+	token          string
+	tailnet        string
+	printVer       bool
+	pollLimit      time.Duration = time.Minute * 5
+	useLocalAPI    bool
+	localAPISocket string = tailscalesd.PublicAPIHost
 
 	// Version of tailscalesd. Set at build time to something meaningful.
 	Version = "development"
@@ -58,11 +58,24 @@ func defineFlags() {
 	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
 	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
 	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
+	flag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API.")
+}
+
+type logWriter struct {
+	TZ     *time.Location
+	Format string
+}
+
+func (w *logWriter) Write(data []byte) (int, error) {
+	return fmt.Printf("%v %v", time.Now().In(w.TZ).Format(w.Format), string(data))
 }
 
 func main() {
 	log.SetFlags(0)
-	log.SetOutput(logwriter.Default())
+	log.SetOutput(&logWriter{
+		TZ:     time.UTC,
+		Format: time.RFC3339,
+	})
 
 	defineFlags()
 	flag.Parse()
@@ -73,18 +86,32 @@ func main() {
 	}
 
 	if !useLocalAPI && (token == "" || tailnet == "") {
-		fmt.Println("Both -token and -tailnet are required when using the public API")
+		if _, err := fmt.Fprintln(os.Stderr, "Both -token and -tailnet are required when using the public API"); err != nil {
+			panic(err)
+		}
 		flag.Usage()
 		return
 	}
 
-	var d tailscalesd.Discoverer
-	if useLocalAPI {
-		d = tailscalesd.New(tailscalesd.UsingLocalAPI(), tailscalesd.WithRateLimit(pollLimit))
-	} else {
-		d = tailscalesd.New(tailscalesd.UsingPublicAPI(tailnet, token), tailscalesd.WithRateLimit(pollLimit))
+	if useLocalAPI && localAPISocket == "" {
+		if _, err := fmt.Fprintln(os.Stderr, "-localapi_socket must not be empty when using the local API."); err != nil {
+			panic(err)
+		}
+		flag.Usage()
+		return
 	}
-	http.Handle("/", tailscalesd.Export(d, time.Minute*5))
+
+	var ts tailscalesd.Discoverer
+	if useLocalAPI {
+		ts = tailscalesd.LocalAPI(tailscalesd.LocalAPISocket)
+	} else {
+		ts = tailscalesd.PublicAPI(tailnet, token)
+	}
+	ts = &tailscalesd.RateLimitedDiscoverer{
+		Wrap:      ts,
+		Frequency: pollLimit,
+	}
+	http.Handle("/", tailscalesd.Export(ts))
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))
 	log.Print("Done")

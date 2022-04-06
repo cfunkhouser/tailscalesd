@@ -1,38 +1,27 @@
-// Package tailscalesd provides Prometheus Service Discovery for Tailscale.
+// Package tailscalesd provides Prometheus Service Discovery for Tailscale using
+// a naive, bespoke Tailscale API client supporting both the public v2 and local
+// APIs. It has only the functionality needed for tailscalesd. You should not
+// be tempted to use it for anything else.
 package tailscalesd
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"sync"
-	"time"
-
-	"github.com/cfunkhouser/tailscalesd/internal/tailscale"
-	"github.com/cfunkhouser/tailscalesd/internal/tailscale/local"
-	"github.com/cfunkhouser/tailscalesd/internal/tailscale/public"
 )
-
-// TargetDescriptor as Prometheus expects it. For more details, see
-// https://prometheus.io/docs/prometheus/latest/http_sd/.
-type TargetDescriptor struct {
-	Targets []string          `json:"targets"`
-	Labels  map[string]string `json:"labels,omitempty"`
-}
 
 const (
 	// LabelMetaAPI is the host which provided the details about this device.
 	// Will be "localhost" for the local API.
 	LabelMetaAPI = "__meta_tailscale_api"
 
-	// LabelMetaDeviceAuthorized is whether the target is currently authorized on the Tailnet.
-	// Will always be true when using the local API.
+	// LabelMetaDeviceAuthorized is whether the target is currently authorized
+	// on the Tailnet. Will always be true when using the local API.
 	LabelMetaDeviceAuthorized = "__meta_tailscale_device_authorized"
 
 	// LabelMetaDeviceClientVersion is the Tailscale client version in use on
@@ -63,9 +52,60 @@ const (
 	LabelMetaTailnet = "__meta_tailscale_tailnet"
 )
 
-// filterEmpty removes entries in a map which have either an empty key or empty
-// value.
-func filterEmpty(in map[string]string) map[string]string {
+// Device in a Tailnet, as reported by one of the various Tailscale APIs.
+type Device struct {
+	Addresses     []string `json:"addresses"`
+	API           string   `json:"api"`
+	Authorized    bool     `json:"authorized"`
+	ClientVersion string   `json:"clientVersion,omitempty"`
+	Hostname      string   `json:"hostname"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	OS            string   `json:"os"`
+	Tailnet       string   `json:"tailnet"`
+	Tags          []string `json:"tags"`
+}
+
+// Discoverer of things exposed by the various Tailscale APIs.
+type Discoverer interface {
+	// Devices reported by the Tailscale public API as belonging to the
+	// configured tailnet.
+	Devices(context.Context) ([]Device, error)
+}
+
+// TargetDescriptor as Prometheus expects it. For more details, see
+// https://prometheus.io/docs/prometheus/latest/http_sd/.
+type TargetDescriptor struct {
+	Targets []string          `json:"targets"`
+	Labels  map[string]string `json:"labels,omitempty"`
+}
+
+type filter func(TargetDescriptor) TargetDescriptor
+
+func filterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
+	var targets []string
+	for _, target := range td.Targets {
+		ip := net.ParseIP(target)
+		if ip == nil {
+			// target is not a valid IP address of any version, but this filter
+			// is explicitly for IPv6 addresses, so we leave the garbage in
+			// place.
+			targets = append(targets, target)
+			continue
+		}
+		if ipv4 := ip.To4(); ipv4 != nil {
+			targets = append(targets, ipv4.String())
+		}
+	}
+	return TargetDescriptor{
+		Targets: targets,
+		Labels:  td.Labels,
+	}
+}
+
+// excludeEmptyMapEntries removes entries in a map which have either an empty
+// key or empty value.
+func excludeEmptyMapEntries(in map[string]string) map[string]string {
 	if in == nil {
 		return nil
 	}
@@ -79,35 +119,15 @@ func filterEmpty(in map[string]string) map[string]string {
 	return filtered
 }
 
-type filter func(TargetDescriptor) TargetDescriptor
-
-func filterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
-	var targets []string
-	for _, target := range td.Targets {
-		ip := net.ParseIP(target)
-		if ip == nil {
-			// target is not a valid IP address of any version.
-			continue
-		}
-		if ipv4 := ip.To4(); ipv4 != nil {
-			targets = append(targets, ipv4.String())
-		}
-	}
-	return TargetDescriptor{
-		Targets: targets,
-		Labels:  td.Labels,
-	}
-}
-
 func filterEmptyLabels(td TargetDescriptor) TargetDescriptor {
 	return TargetDescriptor{
 		Targets: td.Targets,
-		Labels:  filterEmpty(td.Labels),
+		Labels:  excludeEmptyMapEntries(td.Labels),
 	}
 }
 
 // translate Devices to Prometheus TargetDescriptor, filtering empty labels.
-func translate(devices []tailscale.Device, filters ...filter) (found []TargetDescriptor) {
+func translate(devices []Device, filters ...filter) (found []TargetDescriptor) {
 	for _, d := range devices {
 		target := TargetDescriptor{
 			Targets: d.Addresses,
@@ -143,157 +163,56 @@ func translate(devices []tailscale.Device, filters ...filter) (found []TargetDes
 	return
 }
 
-type tailscaleAPI interface {
-	Devices(context.Context) ([]tailscale.Device, error)
-}
-
-type discoverer struct {
-	ts tailscaleAPI
-}
-
-// DiscoverDevices in a tailnet.
-func (d *discoverer) DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error) {
-	devices, err := d.ts.Devices(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return translate(devices, filterEmptyLabels, filterIPv6Addresses), nil
-}
-
-var ErrStaleResults = errors.New("potentially stale results")
-
-type rateLimitingDiscoverer struct {
-	sync.RWMutex
-	discoverer Discoverer
-	freq       time.Duration
-
-	// protected
-	lastDevices []TargetDescriptor
-	earliest    time.Time
-}
-
-func (d *rateLimitingDiscoverer) refreshDevices(ctx context.Context) ([]TargetDescriptor, error) {
-	log.Printf("Refreshing Devices")
-	devices, err := d.discoverer.DiscoverDevices(ctx)
-	if err != nil {
-		return devices, err
-	}
-
-	d.Lock()
-	defer d.Unlock()
-
-	d.lastDevices = devices
-	d.earliest = time.Now().Add(d.freq)
-	log.Printf("Device refresh successful. Next refresh no sooner than %v", d.earliest.Format(time.RFC3339))
-	return devices, nil
-}
-
-func (d *rateLimitingDiscoverer) DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error) {
-	d.RLock()
-	expired := time.Now().After(d.earliest)
-	last := make([]TargetDescriptor, len(d.lastDevices))
-	_ = copy(last, d.lastDevices)
-	d.RUnlock()
-
-	if expired {
-		devices, err := d.refreshDevices(ctx)
-		if err != nil {
-			log.Printf("Failed refreshing: %v", err)
-			return last, ErrStaleResults
-		}
-		return devices, nil
-	}
-	return last, nil
-}
-
-func defaultHTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: time.Second * 10,
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 5 * time.Second,
-			}).Dial,
-			TLSHandshakeTimeout: 5 * time.Second,
-		},
-	}
-}
-
-func UsingLocalAPI() tailscaleAPI {
-	// TODO(cfunkhouser): Make this configurable.
-	return local.New("/run/tailscale/tailscaled.sock")
-}
-
-func UsingPublicAPI(tailnet, token string) tailscaleAPI {
-	return &public.API{
-		Client:  defaultHTTPClient(),
-		APIBase: tailscale.PublicAPI,
-		Tailnet: tailnet,
-		Token:   token,
-	}
-}
-
-type Option func(Discoverer) Discoverer
-
-func WithRateLimit(freq time.Duration) Option {
-	return func(d Discoverer) Discoverer {
-		return &rateLimitingDiscoverer{
-			discoverer: d,
-			freq:       freq,
-		}
-	}
-}
-
-// Discoverer of things in a tailnet.
-type Discoverer interface {
-	DiscoverDevices(ctx context.Context) ([]TargetDescriptor, error)
-}
-
-func New(api tailscaleAPI, opts ...Option) Discoverer {
-	var d Discoverer = &discoverer{
-		ts: api,
-	}
-	for _, opt := range opts {
-		d = opt(d)
-	}
-	return d
-}
-
-// discoveryHandler is a http.Handler that exposes the SD payload. It caches the
-// last valid payload for a fixed period of time to prevent hammering Tailscale's
-// API.
 type discoveryHandler struct {
-	d Discoverer
+	ts      Discoverer
+	filters []filter
+}
+
+func serveAndLog(w io.Writer, msg string) {
+	log.Print(msg)
+	fmt.Fprint(w, msg)
 }
 
 func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	targets, err := h.d.DiscoverDevices(r.Context())
+	if h == nil || h.ts == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		serveAndLog(w, "Attempted to serve with an improperly initialized handler.")
+		return
+	}
+	devices, err := h.ts.Devices(r.Context())
 	if err != nil {
-		if err != ErrStaleResults {
+		if err != errStaleResults {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Printf("Failed to discover Tailscale devices: %v", err)
-			fmt.Fprintf(w, "Failed to discover Tailscale devices: %v", err)
+			serveAndLog(w, fmt.Sprintf("Failed to discover Tailscale devices: %v", err))
 			return
 		}
+		// TODO(cfunkhouser): Investigate whether Prometheus respects cache
+		// control headers, and implement accordingly here.
 		log.Print("Serving potentially stale results")
 	}
+	targets := translate(devices, h.filters...)
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(targets); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Failed encoding targets to JSON: %v", err)
-		fmt.Fprintf(w, "Failed encoding targets to JSON: %v", err)
+		serveAndLog(w, fmt.Sprintf("Failed encoding targets to JSON: %v", err))
 		return
 	}
 
-	w.Header().Add("Content-Type", "application/json")
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	if _, err := io.Copy(w, &buf); err != nil {
-		// The transaction with the client is already started, so there's nothing
-		// graceful to do here. Log any errors for troubleshooting later.
+		// The transaction with the client is already started, so there's
+		// nothing graceful to do here. Log any errors for troubleshooting
+		// later.
 		log.Printf("Failed sending JSON payload to the client: %v", err)
 	}
 }
 
-// Export the Discoverer as a http.Handler.
-func Export(d Discoverer, pollFrequency time.Duration) http.Handler {
-	return &discoveryHandler{d}
+// Export the Tailscale Discoverer for Service Discovery via HTTP.
+func Export(ts Discoverer) http.Handler {
+	return &discoveryHandler{
+		ts: ts,
+		// TODO(cfunkhouser): Make these filters configurable.
+		filters: []filter{filterEmptyLabels, filterIPv6Addresses},
+	}
 }
