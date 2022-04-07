@@ -17,6 +17,9 @@ a union of targets from both APIs.**
 
 - `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
   Defaults to `0.0.0.0:9242`.
+- `-ipv6` / `EXPOSE_IPV6` instructs TailscaleSD to include IPv6 addresses in the
+  target list. **Be careful with this, the colons in IPv6 addresses wreak havoc
+  with Prometheus configurations!**
 - `-localapi` / `TAILSCALE_USE_LOCAL_API` instructs TailscaleSD to use the
   `tailscaled`-exported local API for discovery.
 - `-localapi_socket` / `TAILSCALE_LOCAL_API_SOCKET` is the path to the Unix

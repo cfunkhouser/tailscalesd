@@ -80,9 +80,11 @@ type TargetDescriptor struct {
 	Labels  map[string]string `json:"labels,omitempty"`
 }
 
-type filter func(TargetDescriptor) TargetDescriptor
+// TargetFilter maniupulates TargetDescriptors before being served.
+type TargetFilter func(TargetDescriptor) TargetDescriptor
 
-func filterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
+// FilterIPv6Addresses from TargetDescriptors. Results in only IPv4 targets.
+func FilterIPv6Addresses(td TargetDescriptor) TargetDescriptor {
 	var targets []string
 	for _, target := range td.Targets {
 		ip := net.ParseIP(target)
@@ -127,7 +129,7 @@ func filterEmptyLabels(td TargetDescriptor) TargetDescriptor {
 }
 
 // translate Devices to Prometheus TargetDescriptor, filtering empty labels.
-func translate(devices []Device, filters ...filter) (found []TargetDescriptor) {
+func translate(devices []Device, filters ...TargetFilter) (found []TargetDescriptor) {
 	for _, d := range devices {
 		target := TargetDescriptor{
 			Targets: d.Addresses,
@@ -164,8 +166,8 @@ func translate(devices []Device, filters ...filter) (found []TargetDescriptor) {
 }
 
 type discoveryHandler struct {
-	ts      Discoverer
-	filters []filter
+	d       Discoverer
+	filters []TargetFilter
 }
 
 func serveAndLog(w io.Writer, msg string) {
@@ -174,12 +176,12 @@ func serveAndLog(w io.Writer, msg string) {
 }
 
 func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.ts == nil {
+	if h == nil || h.d == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		serveAndLog(w, "Attempted to serve with an improperly initialized handler.")
 		return
 	}
-	devices, err := h.ts.Devices(r.Context())
+	devices, err := h.d.Devices(r.Context())
 	if err != nil {
 		if err != errStaleResults {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -208,11 +210,14 @@ func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Export the Tailscale Discoverer for Service Discovery via HTTP.
-func Export(ts Discoverer) http.Handler {
+// Empty labels must always be removed.
+var defaultFilters = []TargetFilter{filterEmptyLabels}
+
+// Export the Tailscale Discoverer for Service Discovery via HTTP, optionally
+// applying filters to the discovery results.
+func Export(d Discoverer, with ...TargetFilter) http.Handler {
 	return &discoveryHandler{
-		ts: ts,
-		// TODO(cfunkhouser): Make these filters configurable.
-		filters: []filter{filterEmptyLabels, filterIPv6Addresses},
+		d:       d,
+		filters: append(defaultFilters[:], with...),
 	}
 }

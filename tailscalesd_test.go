@@ -103,9 +103,9 @@ func TestFilterIPv6Addresses(t *testing.T) {
 		},
 	} {
 		t.Run(tn, func(t *testing.T) {
-			got := filterIPv6Addresses(tc.descriptor)
+			got := FilterIPv6Addresses(tc.descriptor)
 			if diff := cmp.Diff(got, tc.want); diff != "" {
-				t.Errorf("filterIPv6Addresses: mismatch (-got, +want):\n%v", diff)
+				t.Errorf("FilterIPv6Addresses: mismatch (-got, +want):\n%v", diff)
 			}
 		})
 	}
@@ -114,7 +114,7 @@ func TestFilterIPv6Addresses(t *testing.T) {
 func TestTranslate(t *testing.T) {
 	for tn, tc := range map[string]struct {
 		devices []Device
-		filters []filter
+		filters []TargetFilter
 		want    []TargetDescriptor
 	}{
 		"zero": {},
@@ -221,7 +221,7 @@ func TestTranslate(t *testing.T) {
 					},
 				},
 			},
-			filters: []filter{
+			filters: []TargetFilter{
 				func(in TargetDescriptor) TargetDescriptor {
 					in.Labels["test_label"] = "IT WORKED"
 					return in
@@ -333,7 +333,7 @@ func TestDiscoveryHandler(t *testing.T) {
 			want: httpWant{
 				code:        http.StatusOK,
 				contentType: "application/json; charset=utf-8",
-				body:        `[{"targets":["100.2.3.4"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:foo","__meta_tailscale_tailnet":"example@gmail.com"}},{"targets":["100.2.3.4"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:bar","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
+				body:        `[{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:foo","__meta_tailscale_tailnet":"example@gmail.com"}},{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:bar","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
 			},
 		},
 		"results with no errors are served": {
@@ -361,7 +361,7 @@ func TestDiscoveryHandler(t *testing.T) {
 			want: httpWant{
 				code:        http.StatusOK,
 				contentType: "application/json; charset=utf-8",
-				body:        `[{"targets":["100.2.3.4"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:foo","__meta_tailscale_tailnet":"example@gmail.com"}},{"targets":["100.2.3.4"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:bar","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
+				body:        `[{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:foo","__meta_tailscale_tailnet":"example@gmail.com"}},{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:bar","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
 			},
 		},
 	} {
