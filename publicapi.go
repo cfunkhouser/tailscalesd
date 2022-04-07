@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type deviceAPIResponse struct {
@@ -24,23 +26,41 @@ type publicAPIDiscoverer struct {
 var errFailedAPIRequest = errors.New("failed API request")
 
 func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+	start := time.Now()
+	lv := prometheus.Labels{
+		"api":  "public",
+		"host": a.apiBase,
+	}
+	defer func() {
+		apiRequestLatencyHistogram.With(lv).Observe(float64(time.Since(start).Milliseconds()))
+	}()
+
 	url := fmt.Sprintf("https://%v@%v/api/v2/tailnet/%v/devices", a.token, a.apiBase, a.tailnet)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	apiRequestCounter.With(prometheus.Labels{
+		"api":  "public",
+		"host": a.apiBase,
+	}).Inc()
 	resp, err := a.client.Do(req)
 	if err != nil {
+		apiRequestErrorCounter.With(lv).Inc()
 		return nil, err
 	}
 	if (resp.StatusCode / 100) != 2 {
+		apiRequestErrorCounter.With(lv).Inc()
 		return nil, fmt.Errorf("%w: %v", errFailedAPIRequest, resp.Status)
 	}
 	defer resp.Body.Close()
 	var d deviceAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		apiPayloadErrorCounter.With(lv).Inc()
 		return nil, fmt.Errorf("%w: bad payload from API: %v", errFailedAPIRequest, err)
 	}
+	tailnetDevicesFoundCounter.With(prometheus.Labels{"tailnet": a.tailnet}).Inc()
 	for i := range d.Devices {
 		d.Devices[i].API = a.apiBase
 		d.Devices[i].Tailnet = a.tailnet

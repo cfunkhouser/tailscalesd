@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"inet.af/netaddr"
 )
 
@@ -45,22 +46,35 @@ type localAPIClient struct {
 var errFailedLocalAPIRequest = errors.New("failed local API request")
 
 func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, error) {
+	start := time.Now()
+	lv := prometheus.Labels{
+		"api":  "local",
+		"host": "localhost",
+	}
+	defer func() {
+		apiRequestLatencyHistogram.With(lv).Observe(float64(time.Since(start).Milliseconds()))
+	}()
+
 	var status interestingStatusSubset
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/localapi/v0/status", nil)
 	if err != nil {
 		return status, err
 	}
+
+	apiRequestCounter.With(lv).Inc()
 	resp, err := a.client.Do(req)
 	if err != nil {
+		apiRequestErrorCounter.With(lv).Inc()
 		return status, err
 	}
-
 	if (resp.StatusCode / 100) != 2 {
+		apiRequestErrorCounter.With(lv).Inc()
 		return status, fmt.Errorf("%w: %v", errFailedLocalAPIRequest, resp.Status)
 	}
 	defer resp.Body.Close()
 
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		apiPayloadErrorCounter.With(lv).Inc()
 		return status, err
 	}
 	return status, nil

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/cfunkhouser/tailscalesd"
 )
 
@@ -101,17 +103,26 @@ func main() {
 		return
 	}
 
-	var ts tailscalesd.Discoverer
+	var ts tailscalesd.MultiDiscoverer
 	if useLocalAPI {
-		ts = tailscalesd.LocalAPI(tailscalesd.LocalAPISocket)
-	} else {
-		ts = tailscalesd.PublicAPI(tailnet, token)
+		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
+			Wrap:      tailscalesd.LocalAPI(tailscalesd.LocalAPISocket),
+			Frequency: pollLimit,
+		})
 	}
-	ts = &tailscalesd.RateLimitedDiscoverer{
-		Wrap:      ts,
-		Frequency: pollLimit,
+
+	if token != "" && tailnet != "" {
+		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
+			Wrap:      tailscalesd.PublicAPI(tailnet, token),
+			Frequency: pollLimit,
+		})
 	}
+
+	// Metrics concerning tailscalesd itself are served from /metrics
+	http.Handle("/metrics", promhttp.Handler())
+	// Service discovery is served at /
 	http.Handle("/", tailscalesd.Export(ts))
+
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))
 	log.Print("Done")

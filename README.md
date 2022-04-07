@@ -3,13 +3,15 @@
 Serves Prometheus HTTP Service Discovery for devices on a Tailscale Tailnet.
 
 For details on HTTP Service Discovery, read the Prometheus docs:
-https://prometheus.io/docs/prometheus/latest/http_sd/
+<https://prometheus.io/docs/prometheus/latest/http_sd/>
 
 ## Usage
 
 The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
 HTTP server. It respects the following configuration parameters, each of which
 may be specified as a flag or an environment variable.
+
+**As of v0.2.1 the the local and public APIs are no longer mutually exclusive. Setting the `-localapi` flag and providing `-tailnet` + `-token` will result in a union of targets from both APIs.**
 
 - `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
   Defaults to `0.0.0.0:9242`.
@@ -51,7 +53,7 @@ block in a `scrape_config`. The following labels are potentially made available
 for all Tailscale nodes discovered, however any label for which the Tailscale
 API did not return a value will be omitted. For more details on each field and
 the API in general, see:
-https://github.com/tailscale/tailscale/blob/main/api.md#tailnet-devices-get
+<https://github.com/tailscale/tailscale/blob/main/api.md#tailnet-devices-get>
 
 Possible target labels follow. See the label comments in
 [`tailscalesd.go`](./tailscalesd.go) for details. There will be one target entry
