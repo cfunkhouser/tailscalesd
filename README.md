@@ -3,13 +3,17 @@
 Serves Prometheus HTTP Service Discovery for devices on a Tailscale Tailnet.
 
 For details on HTTP Service Discovery, read the Prometheus docs:
-https://prometheus.io/docs/prometheus/latest/http_sd/
+<https://prometheus.io/docs/prometheus/latest/http_sd/>
 
 ## Usage
 
 The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
 HTTP server. It respects the following configuration parameters, each of which
 may be specified as a flag or an environment variable.
+
+**As of v0.2.1 the the local and public APIs are no longer mutually exclusive.
+Setting the `-localapi` flag and providing `-tailnet` + `-token` will result in
+a union of targets from both APIs.**
 
 - `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
   Defaults to `0.0.0.0:9242`.
@@ -44,6 +48,16 @@ See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details about
 which labels are supported for each API type. **Do not assume they will be the
 same labels, or that values will match across the APIs!**
 
+## Metrics
+
+As of v0.2.1, TailscaleSD exports Prometheus metrics on the standard `/metrics`
+endpoint. In addition to the standard Go metrics, you will find
+TailscaleSD-specific metrics defined in [`metrics.go`](./metrics.go). The
+metrics are targetted at understanding the behavior of TailscaleSD itself.
+Contributions of additional interesting metrics are welcome, but please remember
+that details about your devices should be handled by your monitoring. This is a
+target discovery tool, _not_ a Prometheus exporter for Tailscale!
+
 ## Prometheus Configuration
 
 Configure Prometheus by placing the `tailscalesd` URL in a `http_sd_configs`
@@ -51,7 +65,7 @@ block in a `scrape_config`. The following labels are potentially made available
 for all Tailscale nodes discovered, however any label for which the Tailscale
 API did not return a value will be omitted. For more details on each field and
 the API in general, see:
-https://github.com/tailscale/tailscale/blob/main/api.md#tailnet-devices-get
+<https://github.com/tailscale/tailscale/blob/main/api.md#tailnet-devices-get>
 
 Possible target labels follow. See the label comments in
 [`tailscalesd.go`](./tailscalesd.go) for details. There will be one target entry

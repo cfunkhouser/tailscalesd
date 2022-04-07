@@ -23,8 +23,11 @@ type RateLimitedDiscoverer struct {
 }
 
 func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, error) {
+	rateLimitedRequestRefreshses.Inc()
+
 	devices, err := c.Wrap.Devices(ctx)
 	if err != nil {
+		rateLimitedStaleResults.Inc()
 		return devices, fmt.Errorf("%w: %v", errStaleResults, err)
 	}
 
@@ -36,6 +39,8 @@ func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, e
 }
 
 func (c *RateLimitedDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+	rateLimitedRequests.Inc()
+
 	c.mu.RLock()
 	expired := time.Now().After(c.earliest)
 	last := make([]Device, len(c.last))
