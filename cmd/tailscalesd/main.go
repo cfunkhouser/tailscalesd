@@ -16,12 +16,13 @@ import (
 
 var (
 	address        string = "0.0.0.0:9242"
-	token          string
-	tailnet        string
-	printVer       bool
+	includeIPv6    bool
+	localAPISocket string        = tailscalesd.PublicAPIHost
 	pollLimit      time.Duration = time.Minute * 5
+	printVer       bool
+	tailnet        string
+	token          string
 	useLocalAPI    bool
-	localAPISocket string = tailscalesd.PublicAPIHost
 
 	// Version of tailscalesd. Set at build time to something meaningful.
 	Version = "development"
@@ -54,13 +55,14 @@ func durationEnvVarWithDefault(key string, def time.Duration) time.Duration {
 }
 
 func defineFlags() {
-	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
-	flag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
-	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
-	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
 	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
+	flag.BoolVar(&includeIPv6, "ipv6", false, "Include IPv6 target addresses.")
 	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
+	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
+	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
 	flag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API.")
+	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
+	flag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
 }
 
 type logWriter struct {
@@ -118,10 +120,15 @@ func main() {
 		})
 	}
 
+	var filters []tailscalesd.TargetFilter
+	if !includeIPv6 {
+		filters = append(filters, tailscalesd.FilterIPv6Addresses)
+	}
+
 	// Metrics concerning tailscalesd itself are served from /metrics
 	http.Handle("/metrics", promhttp.Handler())
 	// Service discovery is served at /
-	http.Handle("/", tailscalesd.Export(ts))
+	http.Handle("/", tailscalesd.Export(ts, filters...))
 
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))
