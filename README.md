@@ -11,7 +11,9 @@ The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
 HTTP server. It respects the following configuration parameters, each of which
 may be specified as a flag or an environment variable.
 
-**As of v0.2.1 the the local and public APIs are no longer mutually exclusive. Setting the `-localapi` flag and providing `-tailnet` + `-token` will result in a union of targets from both APIs.**
+**As of v0.2.1 the the local and public APIs are no longer mutually exclusive.
+Setting the `-localapi` flag and providing `-tailnet` + `-token` will result in
+a union of targets from both APIs.**
 
 - `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
   Defaults to `0.0.0.0:9242`.
@@ -45,6 +47,16 @@ according to your Tailscale ACLs.
 See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details about
 which labels are supported for each API type. **Do not assume they will be the
 same labels, or that values will match across the APIs!**
+
+## Metrics
+
+As of v0.2.1, TailscaleSD exports Prometheus metrics on the standard `/metrics`
+endpoint. In addition to the standard Go metrics, you will find
+TailscaleSD-specific metrics defined in [`metrics.go`](./metrics.go). The
+metrics are targetted at understanding the behavior of TailscaleSD itself.
+Contributions of additional interesting metrics are welcome, but please remember
+that details about your devices should be handled by your monitoring. This is a
+target discovery tool, _not_ a Prometheus exporter for Tailscale!
 
 ## Prometheus Configuration
 

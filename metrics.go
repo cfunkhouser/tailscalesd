@@ -18,7 +18,7 @@ var (
 			Name: "tailscalesd_tailscale_api_request_latency_ms",
 			Help: "Histogram of API request latency measured in milliseconds. " +
 				"Bucketted geometrically.",
-			Buckets: []float64{1, 1.5, 2.25, 3.375, 5.0625, 7.5938, 11.3906, 17.0859, 25.6289},
+			Buckets: []float64{1, 2.75, 7.5625, 20.7969, 57.1914, 157.2764, 432.5100, 1189.4025, 3270.8569, 8994.8566},
 		},
 		[]string{"api", "host"})
 
