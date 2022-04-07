@@ -56,7 +56,7 @@ func durationEnvVarWithDefault(key string, def time.Duration) time.Duration {
 
 func defineFlags() {
 	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
-	flag.BoolVar(&includeIPv6, "ipv6", false, "Include IPv6 target addresses.")
+	flag.BoolVar(&includeIPv6, "ipv6", boolEnvVarWithDefault("EXPOSE_IPV6", false), "Include IPv6 target addresses.")
 	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
 	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
 	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
