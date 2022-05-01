@@ -5,6 +5,16 @@ Serves Prometheus HTTP Service Discovery for devices on a Tailscale Tailnet.
 For details on HTTP Service Discovery, read the Prometheus docs:
 <https://prometheus.io/docs/prometheus/latest/http_sd/>
 
+## Installation
+
+Release builds for various architectures can be obtained from
+[GitHub](https://github.com/cfunkhouser/tailscalesd/releases/latest).
+
+There is also a
+Docker image provided under `ghcr.io/cfunkhouser/tailscalesd`. The `latest` tag
+is automatically updated with each release. The Docker image is available for
+`arm/v7`, `arm64` and `amd64`.
+
 ## Usage
 
 The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
