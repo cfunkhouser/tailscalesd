@@ -56,7 +56,7 @@ func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, e
 	}()
 
 	var status interestingStatusSubset
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/localapi/v0/status", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://local-tailscaled.sock/localapi/v0/status", nil)
 	if err != nil {
 		return status, err
 	}
