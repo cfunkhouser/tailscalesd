@@ -5,6 +5,13 @@ Serves Prometheus HTTP Service Discovery for devices on a Tailscale Tailnet.
 For details on HTTP Service Discovery, read the Prometheus docs:
 <https://prometheus.io/docs/prometheus/latest/http_sd/>
 
+## Maintainer Updates
+
+- **2023-12-23** Hey folks. For the past few years, I have held a job at which I
+  did not use Tailscale (nor GitHub), and which made open source contributions
+  onerous. I have left that job. Sorry for the sparse attention I've paid to
+  this project. That should change a bit from now.
+
 ## Installation
 
 Release builds for various architectures can be obtained from
