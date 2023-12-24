@@ -1,10 +1,10 @@
 package tailscalesd
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"inet.af/netaddr"
 )
 
 func TestTranslatePeerToDevice(t *testing.T) {
@@ -29,9 +29,9 @@ func TestTranslatePeerToDevice(t *testing.T) {
 		HostName: "somethingclever",
 		DNSName:  "this is currently ignored",
 		OS:       "beos",
-		TailscaleIPs: []netaddr.IP{
-			netaddr.MustParseIP("100.2.3.4"),
-			netaddr.MustParseIP("fd7a::1234"),
+		TailscaleIPs: []netip.Addr{
+			netip.MustParseAddr("100.2.3.4"),
+			netip.MustParseAddr("fd7a::1234"),
 		},
 		Tags: []string{
 			"tag:foo",
