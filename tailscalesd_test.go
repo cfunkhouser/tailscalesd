@@ -3,7 +3,7 @@ package tailscalesd
 import (
 	"context"
 	"errors"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +15,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// No log output during test runs.
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 	os.Exit(m.Run())
 }
 
