@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/oauth2/clientcredentials"
+	"tailscale.com/client/tailscale"
 )
 
 type deviceAPIResponse struct {
@@ -68,7 +70,65 @@ func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	return d.Devices, nil
 }
 
+type OAuthPublicAPIDiscoverer struct {
+	apiBase      string
+	clientId     string
+	clientSecret string
+}
+
+func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+	tailscale.I_Acknowledge_This_API_Is_Unstable = true // needed in order to use API clients.
+
+	start := time.Now()
+	lv := prometheus.Labels{
+		"api":  "public",
+		"host": a.apiBase,
+	}
+	defer func() {
+		apiRequestLatencyHistogram.With(lv).Observe(float64(time.Since(start).Milliseconds()))
+	}()
+
+	client := tailscale.NewClient("-", nil)
+	client.BaseURL = "https://" + a.apiBase
+
+	credentials := clientcredentials.Config{
+		ClientID:     a.clientId,
+		ClientSecret: a.clientSecret,
+		TokenURL:     client.BaseURL + "/api/v2/oauth/token",
+		Scopes:       []string{"device"},
+	}
+
+	client.HTTPClient = credentials.Client(ctx)
+
+	tailnet := client.Tailnet()
+
+	apiDevices, err := client.Devices(ctx, &tailscale.DeviceFieldsOpts{})
+	if err != nil {
+		apiRequestErrorCounter.With(lv).Inc()
+		return nil, err
+	}
+
+	devices := make([]Device, len(apiDevices))
+
+	for i, device := range apiDevices {
+		devices[i] = Device{
+			Addresses:     device.Addresses,
+			API:           a.apiBase,
+			Authorized:    device.Authorized,
+			ClientVersion: device.ClientVersion,
+			Hostname:      device.Hostname,
+			ID:            device.DeviceID,
+			Name:          device.Name,
+			OS:            device.OS,
+			Tailnet:       tailnet,
+			Tags:          device.Tags,
+		}
+	}
+	return devices, nil
+}
+
 type PublicAPIOption func(*publicAPIDiscoverer)
+type OAuthAPIOption func(*OAuthPublicAPIDiscoverer)
 
 // WithAPIHost sets the API base against which the PublicAPI Discoverers will
 // attempt discovery. If not used, defaults to PublicAPIHost.
@@ -114,5 +174,19 @@ func PublicAPI(tailnet, token string, opts ...PublicAPIOption) Discoverer {
 	if api.client == nil {
 		api.client = defaultHTTPClient
 	}
+	return api
+}
+
+// The OAuthAPI Discoverer polls the public Tailscale API for hosts in the tailnet.
+func OAuthAPI(clientID string, clientSecret string, opts ...OAuthAPIOption) Discoverer {
+	api := &OAuthPublicAPIDiscoverer{
+		apiBase:      PublicAPIHost,
+		clientId:     clientID,
+		clientSecret: clientSecret,
+	}
+	for _, opt := range opts {
+		opt(api)
+	}
+
 	return api
 }
