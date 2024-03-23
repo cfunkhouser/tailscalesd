@@ -22,6 +22,8 @@ var (
 	printVer       bool
 	tailnet        string
 	token          string
+	clientId       string
+	clientSecret   string
 	useLocalAPI    bool
 
 	// Version of tailscalesd. Set at build time to something meaningful.
@@ -62,6 +64,8 @@ func defineFlags() {
 	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
 	flag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API.")
 	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
+	flag.StringVar(&clientId, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
+	flag.StringVar(&clientSecret, "client_secret", os.Getenv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
 	flag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
 }
 
@@ -89,8 +93,11 @@ func main() {
 		return
 	}
 
-	if !useLocalAPI && (token == "" || tailnet == "") {
-		if _, err := fmt.Fprintln(os.Stderr, "Both -token and -tailnet are required when using the public API"); err != nil {
+	hasToken := !(token == "" || tailnet == "")
+	hasOAuth := clientId != "" && clientSecret != ""
+
+	if !useLocalAPI && !hasToken && !hasOAuth {
+		if _, err := fmt.Fprintln(os.Stderr, "Either -token and -tailnet or -client_id and -client_secret are required when using the public API"); err != nil {
 			panic(err)
 		}
 		flag.Usage()
@@ -116,6 +123,13 @@ func main() {
 	if token != "" && tailnet != "" {
 		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
 			Wrap:      tailscalesd.PublicAPI(tailnet, token),
+			Frequency: pollLimit,
+		})
+	}
+
+	if clientId != "" && clientSecret != "" {
+		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
+			Wrap:      tailscalesd.OAuthAPI(clientId, clientSecret),
 			Frequency: pollLimit,
 		})
 	}
