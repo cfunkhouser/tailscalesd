@@ -49,6 +49,12 @@ a union of targets from both APIs.**
 - `-token` / `TAILSCALE_API_TOKEN` is a Tailscale API token with appropriate
   permissions to access the Tailscale API and enumerate devices. Required when
   using the public API.
+- `-client_id` / `TAILSCALE_CLIENT_ID` is an OAuth Client ID that can be used to
+  get scoped Tailscale API access, and needn't be as short-lived as Tailscale
+  API tokens. It must be used with `-client_secret`.
+- `-client_secret` / `TAILSCALE_CLIENT_SECRET` is an OAuth Client Secret that
+  can be used to get scoped Tailscale API access, and needn't be as short-lived
+  as Tailscale API tokens. It must be used with `-client_id`
 
 ```console
 $ TAILSCALE_API_TOKEN=SUPERSECRET tailscalesd --tailnet alice@gmail.com
