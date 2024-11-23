@@ -17,6 +17,7 @@ import (
 var (
 	address        string = "0.0.0.0:9242"
 	includeIPv6    bool
+	excludeOffline bool
 	localAPISocket string        = tailscalesd.LocalAPISocket
 	pollLimit      time.Duration = time.Minute * 5
 	printVer       bool
@@ -59,6 +60,7 @@ func durationEnvVarWithDefault(key string, def time.Duration) time.Duration {
 func defineFlags() {
 	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
 	flag.BoolVar(&includeIPv6, "ipv6", boolEnvVarWithDefault("EXPOSE_IPV6", false), "Include IPv6 target addresses.")
+	flag.BoolVar(&excludeOffline, "exclude_offline", boolEnvVarWithDefault("EXCLUDE_OFFLINE", false), "Exclude offline nodes.")
 	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
 	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
 	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
@@ -115,7 +117,7 @@ func main() {
 	var ts tailscalesd.MultiDiscoverer
 	if useLocalAPI {
 		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
-			Wrap:      tailscalesd.LocalAPI(localAPISocket),
+			Wrap:      tailscalesd.LocalAPI(localAPISocket, excludeOffline),
 			Frequency: pollLimit,
 		})
 	}
@@ -142,7 +144,7 @@ func main() {
 	// Metrics concerning tailscalesd itself are served from /metrics
 	http.Handle("/metrics", promhttp.Handler())
 	// Service discovery is served at /
-	http.Handle("/", tailscalesd.Export(ts, filters...))
+	http.Handle("/", tailscalesd.Export(ts, excludeOffline, filters...))
 
 	log.Printf("Serving Tailscale service discovery on %q", address)
 	log.Print(http.ListenAndServe(address, nil))

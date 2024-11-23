@@ -22,10 +22,10 @@ type RateLimitedDiscoverer struct {
 	last     []Device
 }
 
-func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, error) {
+func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context, excludeOffline bool) ([]Device, error) {
 	rateLimitedRequestRefreshses.Inc()
 
-	devices, err := c.Wrap.Devices(ctx)
+	devices, err := c.Wrap.Devices(ctx, excludeOffline)
 	if err != nil {
 		rateLimitedStaleResults.Inc()
 		return devices, fmt.Errorf("%w: %v", errStaleResults, err)
@@ -38,7 +38,7 @@ func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, e
 	return devices, nil
 }
 
-func (c *RateLimitedDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+func (c *RateLimitedDiscoverer) Devices(ctx context.Context, excludeOffline bool) ([]Device, error) {
 	rateLimitedRequests.Inc()
 
 	c.mu.RLock()
@@ -48,7 +48,7 @@ func (c *RateLimitedDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	c.mu.RUnlock()
 
 	if expired {
-		return c.refreshDevices(ctx)
+		return c.refreshDevices(ctx, excludeOffline)
 	}
 	return last, nil
 }

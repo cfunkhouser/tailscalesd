@@ -61,6 +61,7 @@ type Device struct {
 	Hostname      string   `json:"hostname"`
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
+	Online        bool     `json:"online"`
 	OS            string   `json:"os"`
 	Tailnet       string   `json:"tailnet"`
 	Tags          []string `json:"tags"`
@@ -70,7 +71,7 @@ type Device struct {
 type Discoverer interface {
 	// Devices reported by the Tailscale public API as belonging to the
 	// configured tailnet.
-	Devices(context.Context) ([]Device, error)
+	Devices(context.Context, bool) ([]Device, error)
 }
 
 // TargetDescriptor as Prometheus expects it. For more details, see
@@ -166,8 +167,9 @@ func translate(devices []Device, filters ...TargetFilter) (found []TargetDescrip
 }
 
 type discoveryHandler struct {
-	d       Discoverer
-	filters []TargetFilter
+	d              Discoverer
+	filters        []TargetFilter
+	excludeOffline bool
 }
 
 func serveAndLog(w io.Writer, msg string) {
@@ -181,7 +183,7 @@ func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		serveAndLog(w, "Attempted to serve with an improperly initialized handler.")
 		return
 	}
-	devices, err := h.d.Devices(r.Context())
+	devices, err := h.d.Devices(r.Context(), h.excludeOffline)
 	if err != nil {
 		if err != errStaleResults {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -215,9 +217,10 @@ var defaultFilters = []TargetFilter{filterEmptyLabels}
 
 // Export the Tailscale Discoverer for Service Discovery via HTTP, optionally
 // applying filters to the discovery results.
-func Export(d Discoverer, with ...TargetFilter) http.Handler {
+func Export(d Discoverer, excludeOffline bool, with ...TargetFilter) http.Handler {
 	return &discoveryHandler{
-		d:       d,
-		filters: append(defaultFilters[:], with...),
+		d:              d,
+		filters:        append(defaultFilters[:], with...),
+		excludeOffline: excludeOffline,
 	}
 }
