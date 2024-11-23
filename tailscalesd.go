@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -152,15 +153,13 @@ func translate(devices []Device, filters ...TargetFilter) (found []TargetDescrip
 			found = append(found, target)
 			continue
 		}
-		for _, t := range d.Tags {
-			lt := target
-			lt.Labels = make(map[string]string)
-			for k, v := range target.Labels {
-				lt.Labels[k] = v
-			}
-			lt.Labels[LabelMetaDeviceTag] = t
-			found = append(found, lt)
+		lt := target
+		lt.Labels = make(map[string]string)
+		for k, v := range target.Labels {
+			lt.Labels[k] = v
 		}
+		lt.Labels[LabelMetaDeviceTag] = strings.Join(d.Tags, ",")
+		found = append(found, lt)
 	}
 	return
 }
