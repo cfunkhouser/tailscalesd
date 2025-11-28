@@ -9,3 +9,7 @@
 *.yaml
 *.yml
 tailscalesd
+
+# GoReleaser
+!.goreleaser.yml
+dist/
