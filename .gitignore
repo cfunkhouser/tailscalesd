@@ -6,8 +6,6 @@
 *.out
 *.so
 *.test
-*.yaml
-*.yml
 tailscalesd
 
 # GoReleaser

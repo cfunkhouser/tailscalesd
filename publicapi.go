@@ -56,7 +56,11 @@ func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 		apiRequestErrorCounter.With(lv).Inc()
 		return nil, fmt.Errorf("%w: %v", errFailedAPIRequest, resp.Status)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Intentionally ignore errors closing the response body.
+		_ = resp.Body.Close()
+	}()
+
 	var d deviceAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
 		apiPayloadErrorCounter.With(lv).Inc()
@@ -72,7 +76,7 @@ func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 
 type OAuthPublicAPIDiscoverer struct {
 	apiBase      string
-	clientId     string
+	clientID     string
 	clientSecret string
 }
 
@@ -92,7 +96,7 @@ func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error
 	client.BaseURL = "https://" + a.apiBase
 
 	credentials := clientcredentials.Config{
-		ClientID:     a.clientId,
+		ClientID:     a.clientID,
 		ClientSecret: a.clientSecret,
 		TokenURL:     client.BaseURL + "/api/v2/oauth/token",
 		Scopes:       []string{"device"},
@@ -177,11 +181,11 @@ func PublicAPI(tailnet, token string, opts ...PublicAPIOption) Discoverer {
 	return api
 }
 
-// The OAuthAPI Discoverer polls the public Tailscale API for hosts in the tailnet.
+// OAuthAPI Discoverer polls the public Tailscale API for hosts in the tailnet.
 func OAuthAPI(clientID string, clientSecret string, opts ...OAuthAPIOption) Discoverer {
 	api := &OAuthPublicAPIDiscoverer{
 		apiBase:      PublicAPIHost,
-		clientId:     clientID,
+		clientID:     clientID,
 		clientSecret: clientSecret,
 	}
 	for _, opt := range opts {
