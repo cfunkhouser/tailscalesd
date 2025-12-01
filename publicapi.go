@@ -74,12 +74,16 @@ func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	return d.Devices, nil
 }
 
+// OAuthPublicAPIDiscoverer is a Discoverer which uses OAuth2 client credentials
+// to authenticate against the Tailscale Public API.
 type OAuthPublicAPIDiscoverer struct {
 	apiBase      string
 	clientID     string
 	clientSecret string
 }
 
+// Devices reported by the Tailscale public API as belonging to the configured
+// tailnet.
 func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	tailscale.I_Acknowledge_This_API_Is_Unstable = true // needed in order to use API clients.
 
@@ -131,7 +135,10 @@ func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error
 	return devices, nil
 }
 
+// PublicAPIOption is an option for configuring PublicAPI Discoverers.
 type PublicAPIOption func(*publicAPIDiscoverer)
+
+// OAuthAPIOption is an option for configuring OAuthAPI Discoverers.
 type OAuthAPIOption func(*OAuthPublicAPIDiscoverer)
 
 // WithAPIHost sets the API base against which the PublicAPI Discoverers will

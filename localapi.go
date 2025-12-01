@@ -92,7 +92,7 @@ func translatePeerToDevice(p *interestingPeerStatusSubset, d *Device) {
 	d.Hostname = p.HostName
 	d.ID = p.ID
 	d.OS = p.OS
-	d.Tags = p.Tags[:]
+	d.Tags = p.Tags
 }
 
 // Devices reported by the Tailscale local API as peers of the local host.

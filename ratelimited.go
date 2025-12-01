@@ -38,6 +38,8 @@ func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, e
 	return devices, nil
 }
 
+// Devices reported by the Tailscale public API as belonging to the configured
+// tailnet.
 func (c *RateLimitedDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	rateLimitedRequests.Inc()
 

@@ -92,7 +92,7 @@ func TestRateLimitedDiscoverer(t *testing.T) {
 				},
 			},
 			wrapped: &testDiscoverer{
-				err: errors.New("this is a test error"),
+				err: errors.New("this is a test error"), //nolint:err113
 			},
 			want: rateLimitedDiscovererTestWant{
 				devices: []Device{

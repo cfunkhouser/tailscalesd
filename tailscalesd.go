@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -185,7 +186,7 @@ func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	devices, err := h.d.Devices(r.Context())
 	if err != nil {
-		if err != errStaleResults {
+		if !errors.Is(err, errStaleResults) {
 			w.WriteHeader(http.StatusInternalServerError)
 			serveAndLog(w, fmt.Sprintf("Failed to discover Tailscale devices: %v", err))
 			return
@@ -220,6 +221,6 @@ var defaultFilters = []TargetFilter{filterEmptyLabels}
 func Export(d Discoverer, with ...TargetFilter) http.Handler {
 	return &discoveryHandler{
 		d:       d,
-		filters: append(defaultFilters[:], with...),
+		filters: append(defaultFilters, with...),
 	}
 }

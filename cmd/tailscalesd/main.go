@@ -1,3 +1,4 @@
+// tailscalesd is a Prometheus service discovery exporter for tailnets.
 package main
 
 import (
@@ -15,16 +16,17 @@ import (
 )
 
 var (
-	address        string = "0.0.0.0:9242"
-	includeIPv6    bool
-	localAPISocket string        = tailscalesd.LocalAPISocket
-	pollLimit      time.Duration = time.Minute * 5
-	printVer       bool
-	tailnet        string
-	token          string
-	clientID       string
-	clientSecret   string
-	useLocalAPI    bool
+	address        = "0.0.0.0:9242"
+	localAPISocket = tailscalesd.LocalAPISocket
+	pollLimit      = time.Minute * 5
+
+	includeIPv6  bool
+	printVer     bool
+	tailnet      string
+	token        string
+	clientID     string
+	clientSecret string
+	useLocalAPI  bool
 
 	// Version of tailscalesd. Set at build time to something meaningful.
 	Version = "development"
@@ -145,6 +147,12 @@ func main() {
 	http.Handle("/", tailscalesd.Export(ts, filters...))
 
 	log.Printf("Serving Tailscale service discovery on %q", address)
-	log.Print(http.ListenAndServe(address, nil))
+	server := &http.Server{
+		Addr:         address,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	log.Print(server.ListenAndServe())
 	log.Print("Done")
 }
