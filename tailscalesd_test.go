@@ -300,7 +300,7 @@ func TestDiscoveryHandler(t *testing.T) {
 		},
 		"unspecified API error": {
 			discoverer: &testDiscoverer{
-				err: errors.New("this is a test error"),
+				err: errors.New("this is a test error"), //nolint:err113
 			},
 			want: httpWant{
 				code: http.StatusInternalServerError,
