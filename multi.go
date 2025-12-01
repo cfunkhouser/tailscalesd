@@ -15,7 +15,7 @@ type discoveryResult struct {
 
 // Devices aggregates the results of calling Devices on each contained
 // Discoverer. Returns the first encountered error.
-func (md MultiDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+func (md MultiDiscoverer) Devices(ctx context.Context, excludeOffline bool) ([]Device, error) {
 	multiDiscovererRequestCounter.Inc()
 	var wg sync.WaitGroup
 	n := len(md)
@@ -24,7 +24,7 @@ func (md MultiDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	for i, d := range md {
 		go func(d Discoverer, result *discoveryResult) {
 			defer wg.Done()
-			result.devices, result.err = d.Devices(ctx)
+			result.devices, result.err = d.Devices(ctx, excludeOffline)
 		}(d, &results[i])
 	}
 	wg.Wait()

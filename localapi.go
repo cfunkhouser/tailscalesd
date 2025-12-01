@@ -34,6 +34,7 @@ type interestingPeerStatusSubset struct {
 	ID           string
 	HostName     string
 	DNSName      string
+	Online       bool
 	OS           string
 	TailscaleIPs []netip.Addr
 	Tags         []string `json:",omitempty"`
@@ -93,16 +94,19 @@ func translatePeerToDevice(p *interestingPeerStatusSubset, d *Device) {
 }
 
 // Devices reported by the Tailscale local API as peers of the local host.
-func (a *localAPIClient) Devices(ctx context.Context) ([]Device, error) {
+func (a *localAPIClient) Devices(ctx context.Context, excludeOffline bool) ([]Device, error) {
 	status, err := a.status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	devices := make([]Device, len(status.Peer))
-	var i int
+	var devices []Device
 	for _, peer := range status.Peer {
-		translatePeerToDevice(peer, &devices[i])
-		i++
+		if excludeOffline && !peer.Online {
+			continue
+		}
+		var device Device
+		translatePeerToDevice(peer, &device)
+		devices = append(devices, device)
 	}
 	return devices, nil
 }
@@ -130,7 +134,7 @@ func defaultHTTPClientWithDialer(dc dialContext) *http.Client {
 }
 
 // LocalAPI Discoverer interrogates the Tailscale localapi for peer devices.
-func LocalAPI(socket string) Discoverer {
+func LocalAPI(socket string, excludeOffline bool) Discoverer {
 	return &localAPIClient{
 		client: defaultHTTPClientWithDialer(unixSocketDialer(socket)),
 	}

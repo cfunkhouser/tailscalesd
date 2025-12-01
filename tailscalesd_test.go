@@ -276,7 +276,7 @@ type testDiscoverer struct {
 	err        error
 }
 
-func (t *testDiscoverer) Devices(_ context.Context) ([]Device, error) {
+func (t *testDiscoverer) Devices(_ context.Context, _ bool) ([]Device, error) {
 	t.Called++
 	return t.discovered, t.err
 }
@@ -369,7 +369,7 @@ func TestDiscoveryHandler(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/", nil)
 			w := httptest.NewRecorder()
 
-			Export(tc.discoverer).ServeHTTP(w, r)
+			Export(tc.discoverer, true).ServeHTTP(w, r)
 
 			if w.Code != tc.want.code {
 				t.Errorf("discoveryHandler: status code mismatch: got: %v want: %v", w.Code, tc.want.code)

@@ -66,7 +66,7 @@ func TestPublicAPIDiscovererDevices(t *testing.T) {
 			defer server.Close()
 
 			d := PublicAPI("testTailnet", "testToken", WithHTTPClient(server.Client()), WithAPIHost(apiBaseForTest(t, server.URL)))
-			got, err := d.Devices(context.TODO())
+			got, err := d.Devices(context.TODO(), false)
 			if got, want := err, tc.wantErr; !errors.Is(got, want) {
 				t.Errorf("Devices: error mismatch: got: %q want: %q", got, want)
 			}

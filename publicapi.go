@@ -27,7 +27,7 @@ type publicAPIDiscoverer struct {
 
 var errFailedAPIRequest = errors.New("failed API request")
 
-func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+func (a *publicAPIDiscoverer) Devices(ctx context.Context, excludeOffline bool) ([]Device, error) {
 	start := time.Now()
 	lv := prometheus.Labels{
 		"api":  "public",
@@ -63,11 +63,18 @@ func (a *publicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 		return nil, fmt.Errorf("%w: bad payload from API: %v", errFailedAPIRequest, err)
 	}
 	tailnetDevicesFoundCounter.With(prometheus.Labels{"tailnet": a.tailnet}).Inc()
-	for i := range d.Devices {
-		d.Devices[i].API = a.apiBase
-		d.Devices[i].Tailnet = a.tailnet
+
+	var devices []Device
+	for _, device := range d.Devices {
+		if excludeOffline && !device.Online {
+			continue
+		}
+
+		device.API = a.apiBase
+		device.Tailnet = a.tailnet
+		devices = append(devices, device)
 	}
-	return d.Devices, nil
+	return devices, nil
 }
 
 type OAuthPublicAPIDiscoverer struct {
@@ -76,7 +83,7 @@ type OAuthPublicAPIDiscoverer struct {
 	clientSecret string
 }
 
-func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context, excludeOffline bool) ([]Device, error) {
 	tailscale.I_Acknowledge_This_API_Is_Unstable = true // needed in order to use API clients.
 
 	start := time.Now()
@@ -110,8 +117,11 @@ func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error
 
 	devices := make([]Device, len(apiDevices))
 
-	for i, device := range apiDevices {
-		devices[i] = Device{
+	for _, device := range apiDevices {
+		if excludeOffline && device.LastSeen != "" {
+			continue
+		}
+		devices = append(devices, Device{
 			Addresses:     device.Addresses,
 			API:           a.apiBase,
 			Authorized:    device.Authorized,
@@ -122,7 +132,7 @@ func (a *OAuthPublicAPIDiscoverer) Devices(ctx context.Context) ([]Device, error
 			OS:            device.OS,
 			Tailnet:       tailnet,
 			Tags:          device.Tags,
-		}
+		})
 	}
 	return devices, nil
 }

@@ -103,7 +103,7 @@ func TestRateLimitedDiscoverer(t *testing.T) {
 	} {
 		t.Run(tn, func(t *testing.T) {
 			tc.discoverer.Wrap = tc.wrapped
-			got, err := tc.discoverer.Devices(context.TODO())
+			got, err := tc.discoverer.Devices(context.TODO(), true)
 			if !errors.Is(err, tc.want.err) {
 				t.Errorf("RateLimitedDiscoverer: unexpected error: %v", err)
 			}
