@@ -1,0 +1,186 @@
+# GoReleaser configuration for tailscalesd
+# Documentation: https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+    # Run tests before building
+    - go test ./...
+
+builds:
+  - id: tailscalesd
+    main: ./cmd/tailscalesd
+    binary: tailscalesd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - 386
+    goarm:
+      - "7"
+    ignore:
+      # Windows doesn't support ARM variants we're targeting
+      - goos: windows
+        goarch: arm
+      # macOS doesn't support 386 or ARM variants
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: tailscalesd
+    formats:
+      - tar.gz
+      - zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+dockers:
+  # Build Docker images for multiple architectures
+  - id: tailscalesd-amd64
+    use: buildx
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}-amd64"
+      - "ghcr.io/cfunkhouser/tailscalesd:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.description=Prometheus Service Discovery for Tailscale"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+
+  - id: tailscalesd-arm64
+    use: buildx
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}-arm64v8"
+      - "ghcr.io/cfunkhouser/tailscalesd:latest-arm64v8"
+    build_flag_templates:
+      - "--platform=linux/arm64/v8"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.description=Prometheus Service Discovery for Tailscale"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+
+  - id: tailscalesd-armv7
+    use: buildx
+    goos: linux
+    goarch: arm
+    goarm: "7"
+    image_templates:
+      - "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}-armv7"
+      - "ghcr.io/cfunkhouser/tailscalesd:latest-armv7"
+    build_flag_templates:
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.description=Prometheus Service Discovery for Tailscale"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+
+docker_manifests:
+  # Create multi-arch manifest for version tag
+  - name_template: "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}-amd64"
+      - "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}-arm64v8"
+      - "ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}-armv7"
+
+  # Create multi-arch manifest for latest tag
+  - name_template: "ghcr.io/cfunkhouser/tailscalesd:latest"
+    image_templates:
+      - "ghcr.io/cfunkhouser/tailscalesd:latest-amd64"
+      - "ghcr.io/cfunkhouser/tailscalesd:latest-arm64v8"
+      - "ghcr.io/cfunkhouser/tailscalesd:latest-armv7"
+
+release:
+  github:
+    owner: cfunkhouser
+    name: tailscalesd
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## TailscaleSD {{ .Version }}
+
+    Prometheus Service Discovery for Tailscale
+
+    ### Installation
+
+    Download the appropriate binary for your platform below, or use the Docker image:
+
+    ```bash
+    docker pull ghcr.io/cfunkhouser/tailscalesd:{{ .Version }}
+    ```
+
+  footer: |
+    ---
+    
+    **Full Changelog**: https://github.com/cfunkhouser/tailscalesd/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Announce is disabled by default
+announce:
+  skip: true
