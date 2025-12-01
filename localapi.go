@@ -71,7 +71,10 @@ func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, e
 		apiRequestErrorCounter.With(lv).Inc()
 		return status, fmt.Errorf("%w: %v", errFailedLocalAPIRequest, resp.Status)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Intentionally ignore errors closing the response body.
+		_ = resp.Body.Close()
+	}()
 
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
 		apiPayloadErrorCounter.With(lv).Inc()

@@ -38,7 +38,7 @@ func TestPublicAPIDiscovererDevices(t *testing.T) {
 		"returns failed request error when the server responds with bad payload": {
 			responder: func(w http.ResponseWriter) {
 				w.Header().Set("Content-Type", "text/plain")
-				fmt.Fprintln(w, "This is decidedly not JSON.")
+				_, _ = fmt.Fprintln(w, "This is decidedly not JSON.")
 			},
 			wantErr: errFailedAPIRequest,
 		},

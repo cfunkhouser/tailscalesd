@@ -172,7 +172,9 @@ type discoveryHandler struct {
 
 func serveAndLog(w io.Writer, msg string) {
 	log.Print(msg)
-	fmt.Fprint(w, msg)
+	if _, err := fmt.Fprint(w, msg); err != nil {
+		log.Printf("Failed writing payload to client: %v", err)
+	}
 }
 
 func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
