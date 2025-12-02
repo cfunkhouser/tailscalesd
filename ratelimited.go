@@ -28,7 +28,7 @@ func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, e
 	devices, err := c.Wrap.Devices(ctx)
 	if err != nil {
 		rateLimitedStaleResults.Inc()
-		return devices, fmt.Errorf("%w: %v", errStaleResults, err)
+		return devices, fmt.Errorf("%w: %w", errStaleResults, err)
 	}
 
 	c.mu.Lock()

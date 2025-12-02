@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"tailscale.com/client/tailscale/v2"
 
 	"github.com/cfunkhouser/tailscalesd"
 )
@@ -95,10 +96,8 @@ func main() {
 		return
 	}
 
-	hasToken := (token != "" && tailnet != "")
 	hasOAuth := clientID != "" && clientSecret != ""
-
-	if !useLocalAPI && !hasToken && !hasOAuth {
+	if !useLocalAPI && token == "" && !hasOAuth {
 		if _, err := fmt.Fprintln(os.Stderr, "Either -token and -tailnet or -client_id and -client_secret are required when using the public API"); err != nil {
 			panic(err)
 		}
@@ -122,16 +121,30 @@ func main() {
 		})
 	}
 
-	if token != "" && tailnet != "" {
+	if token != "" {
 		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
-			Wrap:      tailscalesd.PublicAPI(tailnet, token),
+			Wrap: &tailscalesd.TailscaleAPIDiscoverer{
+				Client: &tailscale.Client{
+					APIKey:  token,
+					Tailnet: tailnet,
+				},
+			},
 			Frequency: pollLimit,
 		})
 	}
 
 	if clientID != "" && clientSecret != "" {
 		ts = append(ts, &tailscalesd.RateLimitedDiscoverer{
-			Wrap:      tailscalesd.OAuthAPI(clientID, clientSecret),
+			Wrap: &tailscalesd.TailscaleAPIDiscoverer{
+				Client: &tailscale.Client{
+					Auth: &tailscale.OAuth{
+						ClientID:     clientID,
+						ClientSecret: clientSecret,
+						Scopes:       []string{"devices:core:read"},
+					},
+					Tailnet: tailnet,
+				},
+			},
 			Frequency: pollLimit,
 		})
 	}

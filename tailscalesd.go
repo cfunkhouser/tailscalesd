@@ -81,7 +81,7 @@ type TargetDescriptor struct {
 	Labels  map[string]string `json:"labels,omitempty"`
 }
 
-// TargetFilter maniupulates TargetDescriptors before being served.
+// TargetFilter manipulates TargetDescriptors before being served.
 type TargetFilter func(TargetDescriptor) TargetDescriptor
 
 // FilterIPv6Addresses from TargetDescriptors. Results in only IPv4 targets.

@@ -39,13 +39,15 @@ type interestingPeerStatusSubset struct {
 	Tags         []string `json:",omitempty"`
 }
 
-type localAPIClient struct {
+// LocalAPIDiscoverer discovers devices from the API served by the Tailscale
+// daemon on the local machine.
+type LocalAPIDiscoverer struct {
 	client *http.Client
 }
 
 var errFailedLocalAPIRequest = errors.New("failed local API request")
 
-func (a *localAPIClient) status(ctx context.Context) (interestingStatusSubset, error) {
+func (a *LocalAPIDiscoverer) status(ctx context.Context) (interestingStatusSubset, error) {
 	start := time.Now()
 	lv := prometheus.Labels{
 		"api":  "local",
@@ -96,7 +98,7 @@ func translatePeerToDevice(p *interestingPeerStatusSubset, d *Device) {
 }
 
 // Devices reported by the Tailscale local API as peers of the local host.
-func (a *localAPIClient) Devices(ctx context.Context) ([]Device, error) {
+func (a *LocalAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	status, err := a.status(ctx)
 	if err != nil {
 		return nil, err
@@ -133,8 +135,8 @@ func defaultHTTPClientWithDialer(dc dialContext) *http.Client {
 }
 
 // LocalAPI Discoverer interrogates the Tailscale localapi for peer devices.
-func LocalAPI(socket string) Discoverer {
-	return &localAPIClient{
+func LocalAPI(socket string) *LocalAPIDiscoverer {
+	return &LocalAPIDiscoverer{
 		client: defaultHTTPClientWithDialer(unixSocketDialer(socket)),
 	}
 }

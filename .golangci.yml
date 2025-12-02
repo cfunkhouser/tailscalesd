@@ -15,7 +15,6 @@ linters:
     staticcheck:
       checks:
         - all # Enables all Staticcheck checks by default
-        - '-SA1019' # Disables the SA1019 check for deprecated APIs.
 formatters:
   enable:
     - gofmt
