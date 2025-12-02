@@ -7,6 +7,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	golang.org/x/oauth2 v0.33.0
 	tailscale.com v1.92.0
+	tailscale.com/client/tailscale/v2 v2.3.0
 )
 
 require (
@@ -28,6 +29,7 @@ require (
 	github.com/prometheus/common v0.67.4 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
+	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect

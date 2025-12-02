@@ -2,6 +2,7 @@ package tailscalesd
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
 
@@ -30,12 +31,14 @@ func (md MultiDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	wg.Wait()
 
 	var ret []Device
+	var errs error
 	for i := range results {
 		if err := results[i].err; err != nil {
 			multiDiscovererErrorCounter.Inc()
-			return ret, err
+			errs = errors.Join(errs, err)
 		}
 		ret = append(ret, results[i].devices...)
 	}
-	return ret, nil
+
+	return ret, errs
 }
