@@ -25,12 +25,14 @@ func (d *TailscaleAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) 
 		"api":  "public",
 		"host": apiHost,
 	}
+	apiRequestCounter.With(lv).Inc()
 	defer func() {
 		apiRequestLatencyHistogram.With(lv).Observe(float64(time.Since(start).Milliseconds()))
 	}()
 
 	devices, err := d.Client.Devices().ListWithAllFields(ctx)
 	if err != nil {
+		apiRequestErrorCounter.With(lv).Inc()
 		return nil, err
 	}
 
@@ -42,7 +44,7 @@ func (d *TailscaleAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) 
 		ret[i].Authorized = dev.Authorized
 		ret[i].ClientVersion = dev.ClientVersion
 		ret[i].Hostname = dev.Hostname
-		ret[i].ID = dev.ID
+		ret[i].ID = dev.NodeID
 		ret[i].Name = dev.Name
 		ret[i].OS = dev.OS
 		ret[i].Tailnet = d.Client.Tailnet

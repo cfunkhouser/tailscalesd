@@ -17,17 +17,17 @@ import (
 )
 
 var (
-	address        = "0.0.0.0:9242"
-	localAPISocket = tailscalesd.LocalAPISocket
-	pollLimit      = time.Minute * 5
+	address   = "0.0.0.0:9242"
+	pollLimit = time.Minute * 5
 
-	includeIPv6  bool
-	printVer     bool
-	tailnet      string
-	token        string
-	clientID     string
-	clientSecret string
-	useLocalAPI  bool
+	clientID       string
+	clientSecret   string
+	includeIPv6    bool
+	localAPISocket string
+	printVer       bool
+	tailnet        string
+	token          string
+	useLocalAPI    bool
 
 	// Version of tailscalesd. Set at build time to something meaningful.
 	Version = "development"
@@ -65,7 +65,7 @@ func defineFlags() {
 	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
 	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
 	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
-	flag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API.")
+	flag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API. Safe to omit.")
 	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
 	flag.StringVar(&clientID, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
 	flag.StringVar(&clientSecret, "client_secret", os.Getenv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
@@ -99,14 +99,6 @@ func main() {
 	hasOAuth := clientID != "" && clientSecret != ""
 	if !useLocalAPI && token == "" && !hasOAuth {
 		if _, err := fmt.Fprintln(os.Stderr, "Either -token and -tailnet or -client_id and -client_secret are required when using the public API"); err != nil {
-			panic(err)
-		}
-		flag.Usage()
-		return
-	}
-
-	if useLocalAPI && localAPISocket == "" {
-		if _, err := fmt.Fprintln(os.Stderr, "-localapi_socket must not be empty when using the local API."); err != nil {
 			panic(err)
 		}
 		flag.Usage()
