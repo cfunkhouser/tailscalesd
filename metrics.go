@@ -30,13 +30,6 @@ var (
 		},
 		[]string{"api", "host"})
 
-	apiPayloadErrorCounter = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "tailscalesd_tailscale_api_payload_errors",
-			Help: "Counter of bad payload responses from Tailscale APIs. Denominated by tailscalesd_tailscale_api_requests.",
-		},
-		[]string{"api", "host"})
-
 	multiDiscovererRequestCounter = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "tailscalesd_tailscale_multi_requests",
@@ -68,10 +61,10 @@ var (
 			Help: "Counter of requests to a rate limited discoverer which result a return of stale results.",
 		})
 
-	tailnetDevicesFoundCounter = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "tailscalesd_public_api_devices_found",
-			Help: "Counter of devices found using the public API, labeled with tailnet name.",
+	tailnetDevicesPerTailnetGauge = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "tailscalesd_public_api_devices_per_tailnet",
+			Help: "Number of devices reported for each tailnet using the public API during the last refresh.",
 		},
 		[]string{"tailnet"})
 )
