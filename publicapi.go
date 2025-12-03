@@ -50,7 +50,7 @@ func (d *TailscaleAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) 
 		ret[i].Tailnet = d.Client.Tailnet
 		ret[i].Tags = dev.Tags
 	}
-	tailnetDevicesFoundCounter.With(prometheus.Labels{"tailnet": d.Client.Tailnet}).Inc()
+	tailnetDevicesPerTailnetGauge.WithLabelValues(d.Client.Tailnet).Set(float64(len(ret)))
 
 	return ret, nil
 }
