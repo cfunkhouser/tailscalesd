@@ -5,13 +5,6 @@ Serves Prometheus HTTP Service Discovery for devices on a Tailscale Tailnet.
 For details on HTTP Service Discovery, read the Prometheus docs:
 <https://prometheus.io/docs/prometheus/latest/http_sd/>
 
-## Maintainer Updates
-
-- **2023-12-23** Hey folks. For the past few years, I have held a job at which I
-  did not use Tailscale (nor GitHub), and which made open source contributions
-  onerous. I have left that job. Sorry for the sparse attention I've paid to
-  this project. That should change a bit from now.
-
 ## Installation
 
 Release builds for various architectures can be obtained from
@@ -44,11 +37,13 @@ a union of targets from both APIs.**
 - `-poll` / `TAILSCALE_API_POLL_LIMIT` is the limit of how frequently the
   Tailscale API may be polled. Cached results are served between intervals.
   Defaults to 5 minutes. Also applies to local API.
-- `-tailnet` / `TAILNET` is the name of the tailnet to enumerate. Required
-  when using the public API.
+- `-tailnet` / `TAILNET` is the name of the tailnet to enumerate. **No longer
+  required when using the public API.** If omitted, the placeholder default
+  `"-"` will be used, which is consistent with the new behavior of the Tailscale
+  API.
 - `-token` / `TAILSCALE_API_TOKEN` is a Tailscale API token with appropriate
-  permissions to access the Tailscale API and enumerate devices. Required when
-  using the public API.
+  permissions to access the Tailscale API and enumerate devices. Mutually
+  exclusive with `-client_id` / `-client_secret`.
 - `-client_id` / `TAILSCALE_CLIENT_ID` is an OAuth Client ID that can be used to
   get scoped Tailscale API access, and needn't be as short-lived as Tailscale
   API tokens. It must be used with `-client_secret`.
@@ -57,8 +52,8 @@ a union of targets from both APIs.**
   as Tailscale API tokens. It must be used with `-client_id`
 
 ```console
-$ TAILSCALE_API_TOKEN=SUPERSECRET tailscalesd --tailnet alice@gmail.com
-2021-08-04T15:38:14Z Serving Tailscale service discovery on "0.0.0.0:9242"
+$ TAILSCALE_API_TOKEN=SUPERSECRET tailscalesd
+2025-12-02T15:38:14Z Serving Tailscale service discovery on "0.0.0.0:9242"
 ```
 
 ### Public vs Local API
