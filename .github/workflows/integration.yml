@@ -56,7 +56,7 @@ jobs:
           set -e
           WANT_HN="gha-runner-${{ steps.commit.outputs.short_hash }}"
           JQFILTER='[ .[] | select(.labels.__meta_tailscale_device_hostname == "$WANT_HN") ] | length'
-          FOUND=$(curl -fs http://127.0.0.1:9242/ | jq -r --args WANT_HN "$WANT_HN" "$JQFILTER")
+          FOUND=$(curl -fs http://127.0.0.1:9242/ | jq -r --arg WANT_HN "$WANT_HN" "$JQFILTER")
           if [ ! "$FOUND" -eq "1" ]; then
             echo "Expected exactly one target with hostname $WANT_HN, but found $FOUND"
             exit 1
