@@ -24,7 +24,6 @@ jobs:
           oauth-client-id: ${{ secrets.ACTION_TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.ACTION_TS_OAUTH_CLIENT_SECRET }}
           tags: "tag:github-action-runner"
-          ping: hello.ts.net
 
       - name: Checkout
         uses: actions/checkout@v5
@@ -56,8 +55,8 @@ jobs:
         run: |
           set -e
           WANT_HN="gha-runner-${{ steps.commit.outputs.short_hash }}"
-          JQFILTER='[ .[] | select(.labels.__meta_tailscale_device_hostname == "$WANT_HN") ] | length'
-          FOUND=$(curl -fs http://127.0.0.1:9242/ | jq -r --arg WANT_HN "$WANT_HN" "$JQFILTER")
+          JQFILTER='[ .[] | select(.labels.__meta_tailscale_device_hostname == $want_hn) ] | length'
+          FOUND=$(curl -fs http://127.0.0.1:9242/ | jq -r --arg want_hn "$WANT_HN" "$JQFILTER")
           if [ ! "$FOUND" -eq "1" ]; then
             echo "Expected exactly one target with hostname $WANT_HN, but found $FOUND"
             exit 1
