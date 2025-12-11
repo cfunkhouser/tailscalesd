@@ -2,8 +2,9 @@ name: Go
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  pull_request: {}
+  workflow_dispatch: # Allow triggering manually.
+
 jobs:
   build:
     name: Build and Test

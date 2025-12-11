@@ -1,0 +1,68 @@
+name: Integration Testing
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: # Allow triggering manually.
+
+jobs:
+  integration:
+    name: Test Integration with Tailscale API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Short Hash
+        id: commit
+        run: |
+          git_hash="${{ github.sha }}"
+          short_hash="${git_hash:0:7}"
+          echo "short_hash=${short_hash}" > "$GITHUB_OUTPUT"
+
+      - name: Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          hostname: "gha-runner-${{ steps.commit.outputs.short_hash }}"
+          oauth-client-id: ${{ secrets.ACTION_TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.ACTION_TS_OAUTH_CLIENT_SECRET }}
+          tags: "tag:github-action-runner"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25
+
+      - name: Run TailscaleSD in background
+        env:
+          ADDRESS: "0.0.0.0:9242"
+          TAILSCALE_CLIENT_ID: ${{ secrets.TAILSCALESD_TS_OAUTH_CLIENT_ID }}
+          TAILSCALE_CLIENT_SECRET: ${{ secrets.TAILSCALESD_TS_OAUTH_CLIENT_SECRET }}
+        run: |
+          go run ./cmd/tailscalesd &
+          TAILSCALESD_PID=$!
+          echo "TailscaleSD is PID=$TAILSCALESD_PID"
+          for i in {1..30}; do
+          if curl -fs http://127.0.0.1:9242/ >/dev/null; then
+            echo "TailscaleSD is ready"
+            break
+          fi
+            sleep 1s
+          done
+          echo "TAILSCALESD_PID=$TAILSCALESD_PID" >> $GITHUB_ENV
+
+      - name: Very Runner Host Exists as Target
+        run: |
+          set -e
+          WANT_HN="gha-runner-${{ steps.commit.outputs.short_hash }}"
+          JQFILTER='[ .[] | select(.labels.__meta_tailscale_device_hostname == $want_hn) ] | length'
+          FOUND=$(curl -fs http://127.0.0.1:9242/ | jq -r --arg want_hn "$WANT_HN" "$JQFILTER")
+          if [ ! "$FOUND" -eq "1" ]; then
+            echo "Expected exactly one target with hostname $WANT_HN, but found $FOUND"
+            exit 1
+          else
+            echo "Found exactly one target with hostname $WANT_HN"
+          fi
+
+      - name: Stop TailscaleSD
+        run: kill $TAILSCALESD_PID
