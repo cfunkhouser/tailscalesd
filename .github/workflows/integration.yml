@@ -51,7 +51,7 @@ jobs:
           done
           echo "TAILSCALESD_PID=$TAILSCALESD_PID" >> $GITHUB_ENV
 
-      - name: Test Target Discovery Document
+      - name: Very Runner Host Exists as Target
         run: |
           set -e
           WANT_HN="gha-runner-${{ steps.commit.outputs.short_hash }}"
