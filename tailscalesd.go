@@ -190,7 +190,7 @@ func (h discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// TODO(cfunkhouser): Investigate whether Prometheus respects cache
 		// control headers, and implement accordingly here.
-		slog.Info("Serving potentially stale results")
+		slog.Warn("Serving potentially stale results")
 	}
 	targets := translate(devices, h.filters...)
 

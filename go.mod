@@ -6,6 +6,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/lmittmann/tint v1.1.2
 	github.com/prometheus/client_golang v1.23.2
+	github.com/spf13/pflag v1.0.10
 	tailscale.com v1.92.0
 	tailscale.com/client/tailscale/v2 v2.3.0
 )
