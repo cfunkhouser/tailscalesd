@@ -295,7 +295,7 @@ func TestDiscoveryHandler(t *testing.T) {
 		"nil": {
 			want: httpWant{
 				code: http.StatusInternalServerError,
-				body: "Attempted to serve with an improperly initialized handler.",
+				body: "Attempted to serve with an improperly initialized handler\n",
 			},
 		},
 		"unspecified API error": {
@@ -304,7 +304,7 @@ func TestDiscoveryHandler(t *testing.T) {
 			},
 			want: httpWant{
 				code: http.StatusInternalServerError,
-				body: "Failed to discover Tailscale devices: this is a test error",
+				body: "Failed to discover Tailscale devices\n",
 			},
 		},
 		"stale results are still served": {

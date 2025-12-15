@@ -2,14 +2,17 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"tailscale.com/client/tailscale/v2"
 
@@ -24,6 +27,7 @@ var (
 	clientSecret   string
 	includeIPv6    bool
 	localAPISocket string
+	logLevel       int
 	printVer       bool
 	tailnet        string
 	token          string
@@ -37,6 +41,7 @@ func envVarWithDefault(key, def string) string {
 	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}
+
 	return def
 }
 
@@ -45,6 +50,7 @@ func boolEnvVarWithDefault(key string, def bool) bool {
 		val = strings.ToLower(strings.TrimSpace(val))
 		return val == "true" || val == "yes"
 	}
+
 	return def
 }
 
@@ -54,8 +60,23 @@ func durationEnvVarWithDefault(key string, def time.Duration) time.Duration {
 		if err == nil {
 			return d
 		}
-		log.Printf("Duration parsing failed, using default %q: %v", def, err)
+
+		slog.Warn("Failed parsing duration, using default", "default", def, "error", err)
 	}
+
+	return def
+}
+
+func intEnvVarWithDefault(key string, def int) int {
+	if val, ok := os.LookupEnv(key); ok {
+		i, err := strconv.Atoi(val)
+		if err == nil {
+			return i
+		}
+
+		slog.Warn("Failed parsing integer, using default", "default", def, "error", err)
+	}
+
 	return def
 }
 
@@ -70,26 +91,27 @@ func defineFlags() {
 	flag.StringVar(&clientID, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
 	flag.StringVar(&clientSecret, "client_secret", os.Getenv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
 	flag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
-}
-
-type logWriter struct {
-	TZ     *time.Location
-	Format string
-}
-
-func (w *logWriter) Write(data []byte) (int, error) {
-	return fmt.Printf("%v %v", time.Now().In(w.TZ).Format(w.Format), string(data))
+	flag.IntVar(&logLevel, "level", intEnvVarWithDefault("LOG_LEVEL", int(slog.LevelInfo)), "Log level to use for output. Defaults to INFO. See log/slog for details.")
 }
 
 func main() {
-	log.SetFlags(0)
-	log.SetOutput(&logWriter{
-		TZ:     time.UTC,
-		Format: time.RFC3339,
-	})
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stderr, &tint.Options{
+			TimeFormat: time.RFC3339,
+		}),
+	))
 
 	defineFlags()
 	flag.Parse()
+
+	// Do this again after defining the flags because the log level (and other
+	// values) are parsed from program inputs.
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      slog.Level(logLevel),
+			TimeFormat: time.RFC3339,
+		}),
+	))
 
 	if printVer {
 		fmt.Printf("tailscalesd version %v\n", Version)
@@ -151,13 +173,15 @@ func main() {
 	// Service discovery is served at /
 	http.Handle("/", tailscalesd.Export(ts, filters...))
 
-	log.Printf("Serving Tailscale service discovery on %q", address)
+	slog.Info("Serving Tailscale service discovery", "address", address)
 	server := &http.Server{
 		Addr:         address,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	log.Print(server.ListenAndServe())
-	log.Print("Done")
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		slog.Warn("Server stopped with unexpected error", "error", err)
+	}
+	slog.Debug("Tailscale service discovery done")
 }
