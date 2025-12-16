@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 )
@@ -171,36 +171,34 @@ type discoveryHandler struct {
 	filters []TargetFilter
 }
 
-func serveAndLog(w io.Writer, msg string) {
-	log.Print(msg)
-	if _, err := fmt.Fprint(w, msg); err != nil {
-		log.Printf("Failed writing payload to client: %v", err)
-	}
-}
-
-func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.d == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		serveAndLog(w, "Attempted to serve with an improperly initialized handler.")
+func (h discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.d == nil {
+		const msg = "Attempted to serve with an improperly initialized handler"
+		slog.Error(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
+
 	devices, err := h.d.Devices(r.Context())
 	if err != nil {
 		if !errors.Is(err, errStaleResults) {
-			w.WriteHeader(http.StatusInternalServerError)
-			serveAndLog(w, fmt.Sprintf("Failed to discover Tailscale devices: %v", err))
+			const msg = "Failed to discover Tailscale devices"
+			slog.Error(msg, "error", err)
+			http.Error(w, msg, http.StatusInternalServerError)
 			return
 		}
+
 		// TODO(cfunkhouser): Investigate whether Prometheus respects cache
 		// control headers, and implement accordingly here.
-		log.Print("Serving potentially stale results")
+		slog.Warn("Serving potentially stale results")
 	}
 	targets := translate(devices, h.filters...)
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(targets); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		serveAndLog(w, fmt.Sprintf("Failed encoding targets to JSON: %v", err))
+		const msg = "Failed to encode targets as JSON"
+		slog.Error(msg, "error", err)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 
@@ -209,7 +207,7 @@ func (h *discoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// The transaction with the client is already started, so there's
 		// nothing graceful to do here. Log any errors for troubleshooting
 		// later.
-		log.Printf("Failed sending JSON payload to the client: %v", err)
+		slog.Debug("Failed sending JSON payload to the client", "error", err)
 	}
 }
 
@@ -219,7 +217,7 @@ var defaultFilters = []TargetFilter{filterEmptyLabels}
 // Export the Tailscale Discoverer for Service Discovery via HTTP, optionally
 // applying filters to the discovery results.
 func Export(d Discoverer, with ...TargetFilter) http.Handler {
-	return &discoveryHandler{
+	return discoveryHandler{
 		d:       d,
 		filters: append(defaultFilters, with...),
 	}

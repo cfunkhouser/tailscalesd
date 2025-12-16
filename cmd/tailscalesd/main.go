@@ -2,15 +2,17 @@
 package main
 
 import (
-	"flag"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/pflag"
 	"tailscale.com/client/tailscale/v2"
 
 	"github.com/cfunkhouser/tailscalesd"
@@ -24,6 +26,8 @@ var (
 	clientSecret   string
 	includeIPv6    bool
 	localAPISocket string
+	logLevel       slog.LevelVar
+	logJSON        bool
 	printVer       bool
 	tailnet        string
 	token          string
@@ -37,7 +41,19 @@ func envVarWithDefault(key, def string) string {
 	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}
+
 	return def
+}
+
+func getAndUnsetEnv(key string) string {
+	val, ok := os.LookupEnv(key)
+	if ok {
+		if err := os.Unsetenv(key); err != nil {
+			slog.Debug("Failed unsetting environment variable", "key", key, "error", err)
+		}
+	}
+
+	return val
 }
 
 func boolEnvVarWithDefault(key string, def bool) bool {
@@ -45,6 +61,7 @@ func boolEnvVarWithDefault(key string, def bool) bool {
 		val = strings.ToLower(strings.TrimSpace(val))
 		return val == "true" || val == "yes"
 	}
+
 	return def
 }
 
@@ -54,42 +71,49 @@ func durationEnvVarWithDefault(key string, def time.Duration) time.Duration {
 		if err == nil {
 			return d
 		}
-		log.Printf("Duration parsing failed, using default %q: %v", def, err)
+
+		slog.Warn("Failed parsing duration, using default", "default", def, "error", err)
 	}
+
 	return def
 }
 
+func setLevelFlagValue(l string) error {
+	return logLevel.UnmarshalText([]byte(l))
+}
+
 func defineFlags() {
-	flag.BoolVar(&printVer, "version", false, "Print the version and exit.")
-	flag.BoolVar(&includeIPv6, "ipv6", boolEnvVarWithDefault("EXPOSE_IPV6", false), "Include IPv6 target addresses.")
-	flag.BoolVar(&useLocalAPI, "localapi", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
-	flag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
-	flag.StringVar(&address, "address", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
-	flag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API. Safe to omit.")
-	flag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
-	flag.StringVar(&clientID, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
-	flag.StringVar(&clientSecret, "client_secret", os.Getenv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
-	flag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
-}
-
-type logWriter struct {
-	TZ     *time.Location
-	Format string
-}
-
-func (w *logWriter) Write(data []byte) (int, error) {
-	return fmt.Printf("%v %v", time.Now().In(w.TZ).Format(w.Format), string(data))
+	pflag.BoolVarP(&printVer, "version", "V", false, "Print the version and exit.")
+	pflag.BoolVarP(&includeIPv6, "ipv6", "6", boolEnvVarWithDefault("EXPOSE_IPV6", false), "Include IPv6 target addresses.")
+	pflag.BoolVarP(&useLocalAPI, "localapi", "L", boolEnvVarWithDefault("TAILSCALE_USE_LOCAL_API", false), "Use the Tailscale local API exported by the local node's tailscaled")
+	pflag.DurationVar(&pollLimit, "poll", durationEnvVarWithDefault("TAILSCALE_API_POLL_LIMIT", pollLimit), "Max frequency with which to poll the Tailscale API. Cached results are served between intervals.")
+	pflag.StringVarP(&address, "address", "a", envVarWithDefault("LISTEN", address), "Address on which to serve Tailscale SD")
+	pflag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API. Safe to omit.")
+	pflag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
+	pflag.StringVar(&clientID, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
+	pflag.StringVar(&clientSecret, "client_secret", getAndUnsetEnv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
+	pflag.StringVar(&token, "token", getAndUnsetEnv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
+	pflag.BoolVar(&logJSON, "log-json", boolEnvVarWithDefault("LOG_JSON", false), "Output logs in JSON format instead of pretty console format.")
+	pflag.FuncP("log-level", "v", "Log level to use for output. Defaults to INFO. See log/slog for details.", setLevelFlagValue)
 }
 
 func main() {
-	log.SetFlags(0)
-	log.SetOutput(&logWriter{
-		TZ:     time.UTC,
-		Format: time.RFC3339,
-	})
-
 	defineFlags()
-	flag.Parse()
+	pflag.Parse()
+
+	var h slog.Handler
+	if logJSON {
+		h = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: &logLevel,
+		})
+	} else {
+		h = tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      &logLevel,
+			TimeFormat: time.RFC3339,
+		})
+	}
+
+	slog.SetDefault(slog.New(h))
 
 	if printVer {
 		fmt.Printf("tailscalesd version %v\n", Version)
@@ -101,7 +125,7 @@ func main() {
 		if _, err := fmt.Fprintln(os.Stderr, "Either -token and -tailnet or -client_id and -client_secret are required when using the public API"); err != nil {
 			panic(err)
 		}
-		flag.Usage()
+		pflag.Usage()
 		return
 	}
 
@@ -151,13 +175,15 @@ func main() {
 	// Service discovery is served at /
 	http.Handle("/", tailscalesd.Export(ts, filters...))
 
-	log.Printf("Serving Tailscale service discovery on %q", address)
+	slog.Info("Serving Tailscale service discovery", "address", address)
 	server := &http.Server{
 		Addr:         address,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	log.Print(server.ListenAndServe())
-	log.Print("Done")
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		slog.Warn("Server stopped with unexpected error", "error", err)
+	}
+	slog.Debug("Tailscale service discovery done")
 }
