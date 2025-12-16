@@ -47,12 +47,13 @@ func (d *LocalAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 		return nil, err
 	}
 
-	ret := make([]Device, len(status.Peer))
+	ret := make([]Device, len(status.Peer)+1)
 	var i int
 	for _, peer := range status.Peer {
 		peerToDevice(peer, &ret[i])
 		i++
 	}
+	peerToDevice(status.Self, &ret[i])
 
 	return ret, nil
 }
