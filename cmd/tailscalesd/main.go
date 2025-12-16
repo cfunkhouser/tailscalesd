@@ -27,6 +27,7 @@ var (
 	includeIPv6    bool
 	localAPISocket string
 	logLevel       slog.LevelVar
+	logJSON        bool
 	printVer       bool
 	tailnet        string
 	token          string
@@ -92,19 +93,27 @@ func defineFlags() {
 	pflag.StringVar(&clientID, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
 	pflag.StringVar(&clientSecret, "client_secret", getAndUnsetEnv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
 	pflag.StringVar(&token, "token", getAndUnsetEnv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
-	pflag.FuncP("log_level", "v", "Log level to use for output. Defaults to INFO. See log/slog for details.", setLevelFlagValue)
+	pflag.BoolVar(&logJSON, "log-json", boolEnvVarWithDefault("LOG_JSON", false), "Output logs in JSON format instead of pretty console format.")
+	pflag.FuncP("log-level", "v", "Log level to use for output. Defaults to INFO. See log/slog for details.", setLevelFlagValue)
 }
 
 func main() {
-	slog.SetDefault(slog.New(
-		tint.NewHandler(os.Stderr, &tint.Options{
-			Level:      &logLevel,
-			TimeFormat: time.RFC3339,
-		}),
-	))
-
 	defineFlags()
 	pflag.Parse()
+
+	var h slog.Handler
+	if logJSON {
+		h = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: &logLevel,
+		})
+	} else {
+		h = tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      &logLevel,
+			TimeFormat: time.RFC3339,
+		})
+	}
+
+	slog.SetDefault(slog.New(h))
 
 	if printVer {
 		fmt.Printf("tailscalesd version %v\n", Version)
