@@ -44,6 +44,17 @@ func envVarWithDefault(key, def string) string {
 	return def
 }
 
+func getAndUnsetEnv(key string) string {
+	val, ok := os.LookupEnv(key)
+	if ok {
+		if err := os.Unsetenv(key); err != nil {
+			slog.Debug("Failed unsetting environment variable", "key", key, "error", err)
+		}
+	}
+
+	return val
+}
+
 func boolEnvVarWithDefault(key string, def bool) bool {
 	if val, ok := os.LookupEnv(key); ok {
 		val = strings.ToLower(strings.TrimSpace(val))
@@ -79,8 +90,8 @@ func defineFlags() {
 	pflag.StringVar(&localAPISocket, "localapi_socket", envVarWithDefault("TAILSCALE_LOCAL_API_SOCKET", localAPISocket), "Unix Domain Socket to use for communication with the local tailscaled API. Safe to omit.")
 	pflag.StringVar(&tailnet, "tailnet", os.Getenv("TAILNET"), "Tailnet name.")
 	pflag.StringVar(&clientID, "client_id", os.Getenv("TAILSCALE_CLIENT_ID"), "Tailscale OAuth Client ID")
-	pflag.StringVar(&clientSecret, "client_secret", os.Getenv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
-	pflag.StringVar(&token, "token", os.Getenv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
+	pflag.StringVar(&clientSecret, "client_secret", getAndUnsetEnv("TAILSCALE_CLIENT_SECRET"), "Tailscale OAuth Client Secret")
+	pflag.StringVar(&token, "token", getAndUnsetEnv("TAILSCALE_API_TOKEN"), "Tailscale API Token")
 	pflag.FuncP("log_level", "v", "Log level to use for output. Defaults to INFO. See log/slog for details.", setLevelFlagValue)
 }
 
