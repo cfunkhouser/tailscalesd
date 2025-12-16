@@ -17,6 +17,6 @@ func main() {
 	}
 
 	for _, peer := range status.Peer {
-		slog.Info("Found peer", "hostname", peer.HostName, "peer", peer)
+		slog.Info("Found peer", "hostname", peer.HostName, "ips", peer.TailscaleIPs)
 	}
 }
