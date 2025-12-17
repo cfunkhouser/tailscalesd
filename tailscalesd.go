@@ -14,6 +14,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
+	"strings"
 )
 
 const (
@@ -51,6 +53,10 @@ const (
 	// LabelMetaTailnet is the name of the Tailnet from which this target
 	// information was retrieved. Not reported when using the local API.
 	LabelMetaTailnet = "__meta_tailscale_tailnet"
+
+	// LabelMetaDeviceTagPrefix is the prefix for all labels representing device
+	// tags. The tag name will be appended.
+	LabelMetaDeviceTagPrefix = "__meta_tailscale_device_tag_"
 )
 
 // Device in a Tailnet, as reported by one of the various Tailscale APIs.
@@ -129,10 +135,32 @@ func filterEmptyLabels(td TargetDescriptor) TargetDescriptor {
 	}
 }
 
+var tagReplaceRe = regexp.MustCompile(`[:-]`)
+
+// tagToLabelKey translates a Tailscale tag to a Prometheus target label key.
+func tagToLabelKey(tag string) string {
+	t := strings.TrimPrefix(tag, "tag:")
+	t = strings.ToLower(t)
+	t = tagReplaceRe.ReplaceAllString(t, "_")
+
+	if t == "" {
+		t = "EMPTY"
+	}
+
+	return LabelMetaDeviceTagPrefix + t
+}
+
 // translate Devices to Prometheus TargetDescriptor, filtering empty labels.
-func translate(devices []Device, filters ...TargetFilter) (found []TargetDescriptor) {
-	for _, d := range devices {
-		target := TargetDescriptor{
+func translate(devices []Device, filters ...TargetFilter) []TargetDescriptor {
+	n := len(devices)
+	if n == 0 {
+		return nil
+	}
+
+	// Preallocate the output slice.
+	found := make([]TargetDescriptor, n)
+	for i, d := range devices {
+		found[i] = TargetDescriptor{
 			Targets: d.Addresses,
 			// All labels added here, except for tags.
 			Labels: map[string]string{
@@ -146,24 +174,19 @@ func translate(devices []Device, filters ...TargetFilter) (found []TargetDescrip
 				LabelMetaTailnet:             d.Tailnet,
 			},
 		}
+
+		// Add tags as individual labels.
+		for _, tag := range d.Tags {
+			found[i].Labels[tagToLabelKey(tag)] = "1"
+		}
+
+		// Apply filters.
 		for _, filter := range filters {
-			target = filter(target)
-		}
-		if l := len(d.Tags); l == 0 {
-			found = append(found, target)
-			continue
-		}
-		for _, t := range d.Tags {
-			lt := target
-			lt.Labels = make(map[string]string)
-			for k, v := range target.Labels {
-				lt.Labels[k] = v
-			}
-			lt.Labels[LabelMetaDeviceTag] = t
-			found = append(found, lt)
+			found[i] = filter(found[i])
 		}
 	}
-	return
+
+	return found
 }
 
 type discoveryHandler struct {
