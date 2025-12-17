@@ -3,8 +3,7 @@ package tailscalesd
 import (
 	"context"
 	"errors"
-	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +14,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// No log output during test runs.
-	log.SetOutput(io.Discard)
+	slog.SetDefault(slog.New(slog.DiscardHandler))
 	os.Exit(m.Run())
 }
 
@@ -111,6 +110,29 @@ func TestFilterIPv6Addresses(t *testing.T) {
 	}
 }
 
+func TestTagToLabelKey(t *testing.T) {
+	for _, tc := range []struct {
+		tag  string
+		want string
+	}{
+		{"", "__meta_tailscale_device_tag_EMPTY"},
+		{"tag:", "__meta_tailscale_device_tag_EMPTY"},
+		{"tag:foo", "__meta_tailscale_device_tag_foo"},
+		{"tag:foo-bar", "__meta_tailscale_device_tag_foo_bar"},
+		{"tag:foo_bar", "__meta_tailscale_device_tag_foo_bar"},
+		{"tag:ж", "__meta_tailscale_device_tag_ж"},
+		{"tag:foo:1234", "__meta_tailscale_device_tag_foo_1234"},
+		{"tag:camelCase", "__meta_tailscale_device_tag_camelcase"},
+	} {
+		t.Run(tc.tag, func(t *testing.T) {
+			got := tagToLabelKey(tc.tag)
+			if got != tc.want {
+				t.Errorf("tagToLabelKey(%q): got: %v want: %v", tc.tag, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTranslate(t *testing.T) {
 	for tn, tc := range map[string]struct {
 		devices []Device
@@ -150,7 +172,43 @@ func TestTranslate(t *testing.T) {
 				},
 			},
 		},
-		"single device with two tags expands to two descriptors": {
+		"single device with single tag expands to single descriptor": {
+			devices: []Device{
+				{
+					Addresses: []string{
+						"100.2.3.4",
+						"fd7a::1234",
+					},
+					API:           "foo.example.com",
+					ClientVersion: "420.69",
+					Hostname:      "somethingclever",
+					ID:            "id",
+					Name:          "somethingclever",
+					OS:            "beos",
+					Tailnet:       "example@gmail.com",
+					Tags: []string{
+						"tag:foo",
+					},
+				},
+			},
+			want: []TargetDescriptor{
+				{
+					Targets: []string{"100.2.3.4", "fd7a::1234"},
+					Labels: map[string]string{
+						"__meta_tailscale_api":                   "foo.example.com",
+						"__meta_tailscale_device_authorized":     "false",
+						"__meta_tailscale_device_client_version": "420.69",
+						"__meta_tailscale_device_hostname":       "somethingclever",
+						"__meta_tailscale_device_id":             "id",
+						"__meta_tailscale_device_name":           "somethingclever",
+						"__meta_tailscale_device_os":             "beos",
+						"__meta_tailscale_device_tag_foo":        "1",
+						"__meta_tailscale_tailnet":               "example@gmail.com",
+					},
+				},
+			},
+		},
+		"single device with two tags expands to single descriptor": {
 			devices: []Device{
 				{
 					Addresses: []string{
@@ -181,21 +239,8 @@ func TestTranslate(t *testing.T) {
 						"__meta_tailscale_device_id":             "id",
 						"__meta_tailscale_device_name":           "somethingclever",
 						"__meta_tailscale_device_os":             "beos",
-						"__meta_tailscale_device_tag":            "tag:foo",
-						"__meta_tailscale_tailnet":               "example@gmail.com",
-					},
-				},
-				{
-					Targets: []string{"100.2.3.4", "fd7a::1234"},
-					Labels: map[string]string{
-						"__meta_tailscale_api":                   "foo.example.com",
-						"__meta_tailscale_device_authorized":     "false",
-						"__meta_tailscale_device_client_version": "420.69",
-						"__meta_tailscale_device_hostname":       "somethingclever",
-						"__meta_tailscale_device_id":             "id",
-						"__meta_tailscale_device_name":           "somethingclever",
-						"__meta_tailscale_device_os":             "beos",
-						"__meta_tailscale_device_tag":            "tag:bar",
+						"__meta_tailscale_device_tag_foo":        "1",
+						"__meta_tailscale_device_tag_bar":        "1",
 						"__meta_tailscale_tailnet":               "example@gmail.com",
 					},
 				},
@@ -238,22 +283,8 @@ func TestTranslate(t *testing.T) {
 						"__meta_tailscale_device_id":             "id",
 						"__meta_tailscale_device_name":           "somethingclever",
 						"__meta_tailscale_device_os":             "beos",
-						"__meta_tailscale_device_tag":            "tag:foo",
-						"__meta_tailscale_tailnet":               "example@gmail.com",
-						"test_label":                             "IT WORKED",
-					},
-				},
-				{
-					Targets: []string{"100.2.3.4", "fd7a::1234"},
-					Labels: map[string]string{
-						"__meta_tailscale_api":                   "foo.example.com",
-						"__meta_tailscale_device_authorized":     "false",
-						"__meta_tailscale_device_client_version": "420.69",
-						"__meta_tailscale_device_hostname":       "somethingclever",
-						"__meta_tailscale_device_id":             "id",
-						"__meta_tailscale_device_name":           "somethingclever",
-						"__meta_tailscale_device_os":             "beos",
-						"__meta_tailscale_device_tag":            "tag:bar",
+						"__meta_tailscale_device_tag_foo":        "1",
+						"__meta_tailscale_device_tag_bar":        "1",
 						"__meta_tailscale_tailnet":               "example@gmail.com",
 						"test_label":                             "IT WORKED",
 					},
@@ -333,7 +364,7 @@ func TestDiscoveryHandler(t *testing.T) {
 			want: httpWant{
 				code:        http.StatusOK,
 				contentType: "application/json; charset=utf-8",
-				body:        `[{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:foo","__meta_tailscale_tailnet":"example@gmail.com"}},{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:bar","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
+				body:        `[{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag_bar":"1","__meta_tailscale_device_tag_foo":"1","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
 			},
 		},
 		"results with no errors are served": {
@@ -361,7 +392,7 @@ func TestDiscoveryHandler(t *testing.T) {
 			want: httpWant{
 				code:        http.StatusOK,
 				contentType: "application/json; charset=utf-8",
-				body:        `[{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:foo","__meta_tailscale_tailnet":"example@gmail.com"}},{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag":"tag:bar","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
+				body:        `[{"targets":["100.2.3.4","fd7a::1234"],"labels":{"__meta_tailscale_api":"foo.example.com","__meta_tailscale_device_authorized":"false","__meta_tailscale_device_client_version":"420.69","__meta_tailscale_device_hostname":"somethingclever","__meta_tailscale_device_id":"id","__meta_tailscale_device_name":"somethingclever","__meta_tailscale_device_os":"beos","__meta_tailscale_device_tag_bar":"1","__meta_tailscale_device_tag_foo":"1","__meta_tailscale_tailnet":"example@gmail.com"}}]` + "\n",
 			},
 		},
 	} {
