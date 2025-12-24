@@ -25,35 +25,23 @@ may be specified as a flag or an environment variable.
 Setting the `-localapi` flag and providing `-tailnet` + `-token` will result in
 a union of targets from both APIs.**
 
-- `-address` / `ADDRESS` is the host:port on which to serve TailscaleSD.
-  Defaults to `0.0.0.0:9242`.
-- `-ipv6` / `EXPOSE_IPV6` instructs TailscaleSD to include IPv6 addresses in the
-  target list. **Be careful with this, the colons in IPv6 addresses wreak havoc
-  with Prometheus configurations!**
-- `-localapi` / `TAILSCALE_USE_LOCAL_API` instructs TailscaleSD to use the
-  `tailscaled`-exported local API for discovery.
-- `-localapi_socket` / `TAILSCALE_LOCAL_API_SOCKET` is the path to the Unix
-  domain socket over which `tailscaled` serves the local API.
-- `-poll` / `TAILSCALE_API_POLL_LIMIT` is the limit of how frequently the
-  Tailscale API may be polled. Cached results are served between intervals.
-  Defaults to 5 minutes. Also applies to local API.
-- `-tailnet` / `TAILNET` is the name of the tailnet to enumerate. **No longer
-  required when using the public API.** If omitted, the placeholder default
-  `"-"` will be used, which is consistent with the new behavior of the Tailscale
-  API.
-- `-token` / `TAILSCALE_API_TOKEN` is a Tailscale API token with appropriate
-  permissions to access the Tailscale API and enumerate devices. Mutually
-  exclusive with `-client_id` / `-client_secret`.
-- `-client_id` / `TAILSCALE_CLIENT_ID` is an OAuth Client ID that can be used to
-  get scoped Tailscale API access, and needn't be as short-lived as Tailscale
-  API tokens. It must be used with `-client_secret`.
-- `-client_secret` / `TAILSCALE_CLIENT_SECRET` is an OAuth Client Secret that
-  can be used to get scoped Tailscale API access, and needn't be as short-lived
-  as Tailscale API tokens. It must be used with `-client_id`
-
 ```console
-$ TAILSCALE_API_TOKEN=SUPERSECRET tailscalesd
-2025-12-02T15:38:14Z Serving Tailscale service discovery on "0.0.0.0:9242"
+Usage of tailscalesd:
+Most flag value may also be controlled using environment variables. Usage for such flags begins with the variable name.
+Explicit flag values take precedent over variable values.
+
+  -a, --address string           (ADDRESS) Address on which to serve Tailscale SD (default "0.0.0.0:9242")
+      --client_id string         (TAILSCALE_CLIENT_ID)Tailscale OAuth Client ID
+      --client_secret string     (TAILSCALE_CLIENT_SECRET) Tailscale OAuth Client Secret
+  -6, --ipv6                     (EXPOSE_IPV6) Include IPv6 target addresses.
+  -L, --localapi                 (TAILSCALE_USE_LOCAL_API) Use the Tailscale local API exported by the local node's tailscaled
+      --localapi_socket string   (TAILSCALE_LOCAL_API_SOCKET) Unix Domain Socket to use for communication with the local tailscaled API. Safe to omit.
+      --log-json                 (LOG_JSON) Output logs in JSON format instead of pretty console format.
+  -v, --log-level value          (LOG_LEVEL) Log level to use for output. Defaults to INFO. See log/slog for details.
+      --poll duration            (TAILSCALE_API_POLL_LIMIT) Max frequency with which to poll the Tailscale API. Cached results are served between intervals. (default 5m0s)
+      --tailnet string           (TAILNET) Tailnet name.
+      --token string             (TAILSCALE_API_TOKEN) Tailscale API Token
+  -V, --version                  Print the version and exit.
 ```
 
 ### Public vs Local API
@@ -108,11 +96,10 @@ In the example below, Prometheus will discover Tailscale nodes and attempt to
 ping them using a blackbox exporter.
 
 ```yaml
----
 global:
   scrape_interval: 1m
 scrape_configs:
-- job_name: tailscale-prober
+  - job_name: tailscale-prober
     metrics_path: /probe
     params:
       module: [icmp]
@@ -139,11 +126,10 @@ is likely to result in many "down" targets if your tailnet contains hosts
 without the node exporter. It also doesn't play well with IPv6 addresses.
 
 ```yaml
----
 global:
   scrape_interval: 1m
 scrape_configs:
-- job_name: tailscale-node-exporter
+  - job_name: tailscale-node-exporter
     http_sd_configs:
       - url: http://localhost:9242/
     relabel_configs:
@@ -152,7 +138,7 @@ scrape_configs:
       - source_labels: [__meta_tailscale_device_name]
         target_label: tailscale_name
       - source_labels: [__address__]
-        regex: '(.*)'
+        regex: "(.*)"
         replacement: $1:9100
         target_label: __address__
 ```
