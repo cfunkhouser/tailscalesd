@@ -57,6 +57,14 @@ See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details about
 which labels are supported for each API type. **Do not assume they will be the
 same labels, or that values will match across the APIs!**
 
+As of v0.5.0, TailscaleSD no longer supports exporting targets from the local
+and public APIs at the same time. Additionally, the `-tailnet` flag is no longer
+required, as the Tailscale API now infers the tailnet from the credentials used
+for access. It is only required when the tailnet being discovered is not the
+default tailnet for the credentials. It will still be used in target labels,
+if provided. When not provided explicitly, the tailnet will be reported as `"-"`
+in labels.
+
 ## Metrics
 
 As of v0.2.1, TailscaleSD exports Prometheus metrics on the standard `/metrics`
