@@ -1,0 +1,13 @@
+FROM golang:1 AS builder
+
+COPY . ./build/tailscalesd/
+
+ENV CGO_ENABLED=0
+RUN cd /go/build/tailscalesd/ \
+    && go build -o /tailscalesd ./cmd/tailscalesd
+
+FROM gcr.io/distroless/static-debian13:nonroot
+COPY --from=builder /tailscalesd /tailscalesd
+
+ENTRYPOINT ["/tailscalesd"]
+CMD []
