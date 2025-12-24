@@ -10,10 +10,9 @@ For details on HTTP Service Discovery, read the Prometheus docs:
 Release builds for various architectures can be obtained from
 [GitHub](https://github.com/cfunkhouser/tailscalesd/releases/latest).
 
-There is also a
-Docker image provided under `ghcr.io/cfunkhouser/tailscalesd`. The `latest` tag
-is automatically updated with each release. The Docker image is available for
-`arm/v7`, `arm64` and `amd64`.
+There is also a Docker image provided under `ghcr.io/cfunkhouser/tailscalesd`.
+The `latest` tag is automatically updated with each release. The Docker image is
+available for `arm/v7`, `arm64` and `amd64`.
 
 ## Usage
 
@@ -21,9 +20,20 @@ The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
 HTTP server. It respects the following configuration parameters, each of which
 may be specified as a flag or an environment variable.
 
-**As of v0.2.1 the the local and public APIs are no longer mutually exclusive.
-Setting the `-localapi` flag and providing `-tailnet` + `-token` will result in
-a union of targets from both APIs.**
+**As of v0.5.0, the local and public APIs are mutually exclusive again.**
+The behavior is now that the following flag combinations may not be mixed:
+
+- `-localapi` specifies the local API discovery strategy, using the host node's
+  Tailscale local API for discovering peers
+- `-token` specifies the public API discovery strategy via API tokens
+- `-client_id` + `-client_secret` specifies the public API discovery strategy
+  via OAuth credentials
+
+Additionally, the `-tailnet` flag is no longer required, as the Tailscale API
+now infers the tailnet from the credentials used for access. It is only required
+when the tailnet being discovered is not the default tailnet for the
+credentials. It will still be used in target labels, if provided. When not
+provided explicitly, the tailnet will be reported as `"-"` in labels.
 
 ```console
 Usage of tailscalesd:
@@ -56,14 +66,6 @@ according to your Tailscale ACLs.
 See the label comments in [`tailscalesd.go`](./tailscalesd.go) for details about
 which labels are supported for each API type. **Do not assume they will be the
 same labels, or that values will match across the APIs!**
-
-As of v0.5.0, TailscaleSD no longer supports exporting targets from the local
-and public APIs at the same time. Additionally, the `-tailnet` flag is no longer
-required, as the Tailscale API now infers the tailnet from the credentials used
-for access. It is only required when the tailnet being discovered is not the
-default tailnet for the credentials. It will still be used in target labels,
-if provided. When not provided explicitly, the tailnet will be reported as `"-"`
-in labels.
 
 ## Metrics
 
