@@ -49,7 +49,7 @@ configs:
       global:
         scrape_interval: 1m
       scrape_configs:
-        - job_name: tailscale-prober
+        - job_name: tailscalesd-dev
           metrics_path: /probe
           params:
             module: [icmp_ping]
@@ -67,5 +67,8 @@ configs:
             - source_labels: [__meta_tailscale_device_tag_testing]
               target_label: is_testing
               replacement: true
+            - source_labels: [__meta_tailscale_device_online]
+              regex: ^false$
+              action: drop
             - target_label: __address__
               replacement: blackbox:9115

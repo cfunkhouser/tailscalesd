@@ -20,8 +20,8 @@ The `tailscalesd` server is very simple. It serves the SD payload at `/` on its
 HTTP server. It respects the following configuration parameters, each of which
 may be specified as a flag or an environment variable.
 
-**As of v0.5.0, the local and public APIs are mutually exclusive again.**
-The behavior is now that the following flag combinations may not be mixed:
+**As of v0.5.0, the local and public APIs are mutually exclusive again.** The
+behavior is now that the following flag combinations may not be mixed:
 
 - `-localapi` specifies the local API discovery strategy, using the host node's
   Tailscale local API for discovering peers
@@ -96,6 +96,7 @@ for each unique combination of all labels.
 - `__meta_tailscale_device_hostname`
 - `__meta_tailscale_device_id`
 - `__meta_tailscale_device_name`
+- `__meta_tailscale_device_online`
 - `__meta_tailscale_device_os`
 - `__meta_tailscale_tailnet`
 
@@ -178,3 +179,25 @@ scrape_configs:
         replacement: $1:9100
         target_label: __address__
 ```
+
+## Development
+
+This repository contains a [`compose.yml`](./compose.yml) with a `tailscalesd`
+service configured to build and run the contents of the development directory.
+The resulting image is tagged `tailscalesd:dev`. An instance of Prometheus and
+the blackbox exporter are also started, and all configured together.
+
+To get started, [create an OAuth2 client for your
+tailnet](https://tailscale.com/kb/1623/trust-credentials) with scope
+`devices:core:read`. Then, export the client ID and secret as
+`TAILSCALE_CLIENT_ID` and `TAILSCALE_CLIENT_SECRET` respectively. Once done,
+run: `docker compose up -d --build` (replacing `docker` with `podman` as
+appropriate).
+
+Once done, each service can then be accessed at the following URLs:
+
+- TailscaleSD at http://localhost:9242/
+- Prometheus at http://localhost:9090/
+- Blackbox exporter at http://localhost:9115/
+
+The rules in the compose file may be changed to test according to your needs.

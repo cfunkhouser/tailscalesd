@@ -23,6 +23,7 @@ func peerToDevice(p *ipnstate.PeerStatus, d *Device) {
 	d.Authorized = true // localapi returned peer; assume it's authorized enough
 	d.Hostname = p.HostName
 	d.ID = string(p.ID)
+	d.Online = p.Online
 	d.OS = p.OS
 	if p.Tags != nil {
 		d.Tags = p.Tags.AsSlice()
