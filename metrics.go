@@ -30,19 +30,6 @@ var (
 		},
 		[]string{"api", "host"})
 
-	multiDiscovererRequestCounter = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "tailscalesd_tailscale_multi_requests",
-			Help: "Counter of all requests to a multi-discoverer.",
-		})
-
-	multiDiscovererErrorCounter = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "tailscalesd_tailscale_multi_errors",
-			Help: "Counter of errors during requests to all multi-discoverer. " +
-				"Denominated by tailscalesd_tailscale_multi_requests.",
-		})
-
 	rateLimitedRequests = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "tailscalesd_tailscale_rate_limited_requests",
