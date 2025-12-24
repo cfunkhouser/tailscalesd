@@ -1,0 +1,71 @@
+services:
+  tailscalesd:
+    image: tailscalesd:dev
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    ports:
+      - "9242:9242"
+    environment:
+      TAILSCALE_CLIENT_ID: "${TAILSCALE_CLIENT_ID}"
+      TAILSCALE_CLIENT_SECRET: "${TAILSCALE_CLIENT_SECRET}"
+    command: "-6 -v DEBUG -a 0.0.0.0:9242"
+    restart: unless-stopped
+
+  blackbox:
+    image: prom/blackbox-exporter:latest
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    ports:
+      - "9115:9115"
+    configs:
+      - source: blackbox_config
+        target: /etc/blackbox_exporter/config.yml
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    depends_on:
+      - tailscalesd
+      - blackbox
+    restart: unless-stopped
+
+configs:
+  blackbox_config:
+    content: |
+      modules:
+        icmp_ping:
+          prober: icmp
+          timeout: 3s
+
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 1m
+      scrape_configs:
+        - job_name: tailscale-prober
+          metrics_path: /probe
+          params:
+            module: [icmp_ping]
+          http_sd_configs:
+            - url: http://tailscalesd:9242/
+          relabel_configs:
+            - source_labels: [__address__]
+              target_label: __param_target
+            - source_labels: [__param_target]
+              target_label: instance
+            - source_labels: [__meta_tailscale_device_hostname]
+              target_label: tailscale_hostname
+            - source_labels: [__meta_tailscale_device_name]
+              target_label: tailscale_name
+            - source_labels: [__meta_tailscale_device_tag_testing]
+              target_label: is_testing
+              replacement: true
+            - target_label: __address__
+              replacement: blackbox:9115
