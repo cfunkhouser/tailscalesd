@@ -97,8 +97,34 @@ for each unique combination of all labels.
 - `__meta_tailscale_device_id`
 - `__meta_tailscale_device_name`
 - `__meta_tailscale_device_os`
-- `__meta_tailscale_device_tag`
 - `__meta_tailscale_tailnet`
+
+**As of v0.5.0, handling of Tailscale ACL tags has changed!** For each ACL tag
+reported for a device by the Tailscale API, a target label key is created via
+the following process:
+
+1. The `tag:` prefix will be removed
+2. Value is converted to lower-case / case-folded
+3. Any `-` or `:` characters are converted to `_`
+4. If at this point the value is empty, the value is set to `EMPTY`
+5. Tag value is prepended with `__meta_tailscale_device_tag_`
+
+The value of such a label will always be the static `"1"`. To illustrate, a
+device with the ACL tags `tag:prod:1234` and `tag:someService` will result in
+the following labels in the discovery payload:
+
+```json
+{
+  "__meta_tailscale_device_tag_prod_1234": "1",
+  "__meta_tailscale_device_tag_someservice": "1"
+}
+```
+
+**The behavior in which a distinct target descriptor was added for each ACL tag
+has been removed in v0.5.0!** All devices now result in a single descriptor.
+This handling of ACL tags is new, and it is likely there are edge cases which
+are handled poorly, and most likely around unicode tag values. Please file bugs
+as issues are discovered.
 
 ### Example: Pinging Tailscale Hosts
 
