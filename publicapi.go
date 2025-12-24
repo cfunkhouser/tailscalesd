@@ -46,9 +46,10 @@ func (d *TailscaleAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) 
 		ret[i].Hostname = dev.Hostname
 		ret[i].ID = dev.NodeID
 		ret[i].Name = dev.Name
+		ret[i].Online = dev.ConnectedToControl
 		ret[i].OS = dev.OS
-		ret[i].Tailnet = d.Client.Tailnet
 		ret[i].Tags = dev.Tags
+		ret[i].Tailnet = d.Client.Tailnet
 	}
 	tailnetDevicesPerTailnetGauge.WithLabelValues(d.Client.Tailnet).Set(float64(len(ret)))
 

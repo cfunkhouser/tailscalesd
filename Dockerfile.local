@@ -2,6 +2,9 @@ FROM golang:1 AS builder
 
 COPY . ./build/tailscalesd/
 
+# This must be explicitly set in the build environment, because some
+# dependencies include C code which is build by default. The published builds of
+# TailscaleSD are pure Go, and the dev environment should therefor also be.
 ENV CGO_ENABLED=0
 RUN cd /go/build/tailscalesd/ \
     && go build -o /tailscalesd ./cmd/tailscalesd

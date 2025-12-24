@@ -44,6 +44,10 @@ const (
 	// reported when using the local API.
 	LabelMetaDeviceName = "__meta_tailscale_device_name"
 
+	// LabelMetaDeviceOnline is a boolean value describing whether the Tailscale
+	// control plane believes the device is connected.
+	LabelMetaDeviceOnline = "__meta_tailscale_device_online"
+
 	// LabelMetaDeviceOS is the OS of the target.
 	LabelMetaDeviceOS = "__meta_tailscale_device_os"
 
@@ -68,9 +72,10 @@ type Device struct {
 	Hostname      string   `json:"hostname"`
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
+	Online        bool     `json:"online"`
 	OS            string   `json:"os"`
-	Tailnet       string   `json:"tailnet"`
 	Tags          []string `json:"tags"`
+	Tailnet       string   `json:"tailnet"`
 }
 
 // Discoverer of things exposed by the various Tailscale APIs.
@@ -170,6 +175,7 @@ func translate(devices []Device, filters ...TargetFilter) []TargetDescriptor {
 				LabelMetaDeviceHostname:      d.Hostname,
 				LabelMetaDeviceID:            d.ID,
 				LabelMetaDeviceName:          d.Name,
+				LabelMetaDeviceOnline:        fmt.Sprint(d.Online),
 				LabelMetaDeviceOS:            d.OS,
 				LabelMetaTailnet:             d.Tailnet,
 			},
