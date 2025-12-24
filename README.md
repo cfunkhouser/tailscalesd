@@ -180,6 +180,66 @@ scrape_configs:
         target_label: __address__
 ```
 
+### Example: Adding Tailscale ACL tags to target identity
+
+Extract the Tailscale ACL tag name from the target labels and apply them to the
+target identity. ACL tag values and label values will not be equivalent because
+of differences in what Tailscale and Prometheus believe to be valid strings.
+In the following example, an ACL tag of `tag:prod:1234` will be converted into
+the label `ts_tag_prod_1234`. Read above on the conversion of ACL tag names to
+label keys.
+
+```yaml
+global:
+  scrape_interval: 1m
+scrape_configs:
+  - job_name: tailscale-node-exporter
+    http_sd_configs:
+      - url: http://localhost:9242/
+    relabel_configs:
+      - source_labels: [__meta_tailscale_device_hostname]
+        target_label: tailscale_hostname
+      - source_labels: [__meta_tailscale_device_name]
+        target_label: tailscale_name
+      - action: labelmap
+        regex: __meta_tailscale_device_tags_(.+)
+        replacement: ts_tag_$1
+      - source_labels: [__address__]
+        regex: "(.*)"
+        replacement: $1:9100
+        target_label: __address__
+```
+
+### Example: Dropping offline targets
+
+Use the `__meta_tailscale_device_online` target label to drop targets which the
+Tailscale control plane believes are offline. The following configuration will
+result in only "online" targets, though it's important to remember that
+evaluation of the target descriptors and relabeling will not necessarily be
+aligned with a target going offline, and so you will need to account for failing
+scrapes elsewhere in your configuration.
+
+```yaml
+global:
+  scrape_interval: 1m
+scrape_configs:
+  - job_name: online-hosts-only
+    http_sd_configs:
+      - url: http://localhost:9242/
+    relabel_configs:
+      - source_labels: [__meta_tailscale_device_hostname]
+        target_label: tailscale_hostname
+      - source_labels: [__meta_tailscale_device_name]
+        target_label: tailscale_name
+      - source_labels: [__meta_tailscale_device_online]
+        regex: ^false$
+        action: drop
+      - source_labels: [__address__]
+        regex: "(.*)"
+        replacement: $1:9100
+        target_label: __address__
+```
+
 ## Development
 
 This repository contains a [`compose.yml`](./compose.yml) with a `tailscalesd`

@@ -44,6 +44,10 @@ configs:
           prober: icmp
           timeout: 3s
 
+  # The following configuration produces targets from the Tailnet with all ACL
+  # tags converted to labels like "ts_tag_$TAGNAME", and adds a label "online"
+  # with the string value "true" or "false" as appropriate. See the examples
+  # section in README.md for more details.
   prometheus_config:
     content: |
       global:
@@ -64,11 +68,10 @@ configs:
               target_label: tailscale_hostname
             - source_labels: [__meta_tailscale_device_name]
               target_label: tailscale_name
-            - source_labels: [__meta_tailscale_device_tag_testing]
-              target_label: is_testing
-              replacement: true
             - source_labels: [__meta_tailscale_device_online]
-              regex: ^false$
-              action: drop
+              target_label: online
+            - action: labelmap
+              regex: __meta_tailscale_device_tag_(.+)
+              replacement: ts_tag_$1
             - target_label: __address__
               replacement: blackbox:9115
