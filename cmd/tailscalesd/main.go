@@ -160,7 +160,7 @@ func main() {
 			},
 		}
 	case useToken:
-		slog.Info("Using Public API with toke authentication for discovery")
+		slog.Info("Using Public API with token authentication for discovery")
 		ts = &tailscalesd.TailscaleAPIDiscoverer{
 			Client: &tailscale.Client{
 				APIKey:  token,

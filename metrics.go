@@ -36,7 +36,7 @@ var (
 			Help: "Counter of all requests to a rate limited discoverer.",
 		})
 
-	rateLimitedRequestRefreshses = promauto.NewCounter(
+	rateLimitedRequestRefreshes = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "tailscalesd_tailscale_rate_limited_refreshes",
 			Help: "Counter of requests to a rate limited discoverer which result in a data refresh.",
@@ -45,7 +45,7 @@ var (
 	rateLimitedStaleResults = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "tailscalesd_tailscale_rate_limited_stale",
-			Help: "Counter of requests to a rate limited discoverer which result a return of stale results.",
+			Help: "Counter of requests to a rate limited discoverer which result in a return of stale results.",
 		})
 
 	tailnetDevicesPerTailnetGauge = promauto.NewGaugeVec(

@@ -37,7 +37,6 @@ const (
 	// LabelMetaDeviceID is the target's unique ID within Tailscale, as reported
 	// by the API. The public API reports this as a large integer. The local API
 	// reports a base64 string.
-	// string.
 	LabelMetaDeviceID = "__meta_tailscale_device_id"
 
 	// LabelMetaDeviceName is the name of the device as reported by the API. Not
