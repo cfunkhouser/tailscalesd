@@ -59,7 +59,7 @@ func (d *LocalAPIDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	return ret, nil
 }
 
-// LocalAPI Discoverer interrogates the Tailscale localapi for peer devices.
+// LocalAPI returns a Discoverer that interrogates the Tailscale local API for peer devices.
 func LocalAPI(socket string) *LocalAPIDiscoverer {
 	var ret LocalAPIDiscoverer
 	ret.Client.Socket = socket

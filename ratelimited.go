@@ -23,7 +23,7 @@ type RateLimitedDiscoverer struct {
 }
 
 func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, error) {
-	rateLimitedRequestRefreshses.Inc()
+	rateLimitedRequestRefreshes.Inc()
 
 	devices, err := c.Wrap.Devices(ctx)
 	if err != nil {
