@@ -22,35 +22,35 @@ type RateLimitedDiscoverer struct {
 	last     []Device
 }
 
-func (c *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, error) {
+func (d *RateLimitedDiscoverer) refreshDevices(ctx context.Context) ([]Device, error) {
 	rateLimitedRequestRefreshes.Inc()
 
-	devices, err := c.Wrap.Devices(ctx)
+	devices, err := d.Wrap.Devices(ctx)
 	if err != nil {
 		rateLimitedStaleResults.Inc()
 		return devices, fmt.Errorf("%w: %w", errStaleResults, err)
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.last = devices
-	c.earliest = time.Now().Add(c.Frequency)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.last = devices
+	d.earliest = time.Now().Add(d.Frequency)
 	return devices, nil
 }
 
 // Devices reported by the Tailscale public API as belonging to the configured
 // tailnet.
-func (c *RateLimitedDiscoverer) Devices(ctx context.Context) ([]Device, error) {
+func (d *RateLimitedDiscoverer) Devices(ctx context.Context) ([]Device, error) {
 	rateLimitedRequests.Inc()
 
-	c.mu.RLock()
-	expired := time.Now().After(c.earliest)
-	last := make([]Device, len(c.last))
-	_ = copy(last, c.last)
-	c.mu.RUnlock()
+	d.mu.RLock()
+	expired := time.Now().After(d.earliest)
+	last := make([]Device, len(d.last))
+	_ = copy(last, d.last)
+	d.mu.RUnlock()
 
 	if expired {
-		return c.refreshDevices(ctx)
+		return d.refreshDevices(ctx)
 	}
 	return last, nil
 }

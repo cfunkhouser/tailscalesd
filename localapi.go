@@ -15,6 +15,7 @@ type LocalAPIDiscoverer struct {
 	Client local.Client
 }
 
+// peerToDevice converts a PeerStatus from the local API to the internal Device format.
 func peerToDevice(p *ipnstate.PeerStatus, d *Device) {
 	for i := range p.TailscaleIPs {
 		d.Addresses = append(d.Addresses, p.TailscaleIPs[i].String())

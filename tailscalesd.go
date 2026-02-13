@@ -139,6 +139,8 @@ func filterEmptyLabels(td TargetDescriptor) TargetDescriptor {
 	}
 }
 
+// tagReplaceRe matches characters in Tailscale tags that are invalid in
+// Prometheus label names (colons and hyphens), to be replaced with underscores.
 var tagReplaceRe = regexp.MustCompile(`[:-]`)
 
 // tagToLabelKey translates a Tailscale tag to a Prometheus target label key.
@@ -166,7 +168,7 @@ func translate(devices []Device, filters ...TargetFilter) []TargetDescriptor {
 	for i, d := range devices {
 		found[i] = TargetDescriptor{
 			Targets: d.Addresses,
-			// All labels added here, except for tags.
+			// Base device labels. Tags are added separately below.
 			Labels: map[string]string{
 				LabelMetaAPI:                 d.API,
 				LabelMetaDeviceAuthorized:    fmt.Sprint(d.Authorized),
